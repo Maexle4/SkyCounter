@@ -1,0 +1,37 @@
+{
+	"schemaVersion": 1,
+	"id": "hypixelcounter",
+	"version": "${version}",
+	"name": "Hypixel Counter",
+	"description": "A counter for Hypixel Skyblock by Mäxle.",
+	"authors": [
+		"Mäxle"
+	],
+	"contact": {
+		"homepage": "https://www.youtube.com/@maexle14",
+		"sources": "https://github.com/Maexle4/hypixelcounter"
+	},
+	"license": "MIT",
+	"icon": "assets/hypixelcounter/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"de.maexle.hypixelcounter.HypixelCounter"
+		],
+		"fabric-datagen": [
+			"de.maexle.hypixelcounter.HypixelCounterDataGenerator"
+		],
+		"client":  [
+			"de.maexle.hypixelcounter.HypixelCounterClient"
+		]
+	},
+	"mixins": [
+		"hypixelcounter.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "~1.21",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
