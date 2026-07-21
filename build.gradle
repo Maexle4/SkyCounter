@@ -72,7 +72,7 @@ java {
 }
 
 jar {
-	def projectName = project.name
+	def projectName = "skycounter"
 	inputs.property "projectName", projectName
 
 	from("LICENSE") {

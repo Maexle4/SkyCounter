@@ -66,7 +66,7 @@ public class SkyblockCounterConfig {
             // Default mobs if list is empty
             if (config.mobEntries.isEmpty()) {
                 config.mobEntries.add(new MobEntry("treasure_hoarder_70", "Treasure Hoarder", "textures/gui/sprites/treasure_hoarder_head.png"));
-                config.mobEntries.add(new MobEntry("team_treasurite_corleone_200", "Corleonite Boss", "textures/gui/sprites/boss_corleone_head.png"));
+                config.mobEntries.add(new MobEntry("team_treasurite_corleone_200", "Corleone", "textures/gui/sprites/boss_corleone_head.png"));
                 config.mobEntries.add(new MobEntry("zealot_enderman_55", "Zealot", "textures/gui/sprites/zealot_enderman_head.png"));
             }
 

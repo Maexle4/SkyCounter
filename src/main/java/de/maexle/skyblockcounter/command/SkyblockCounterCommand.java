@@ -22,7 +22,7 @@ public class SkyblockCounterCommand {
         dispatcher.register(literal("skyCounter")
                 .then(literal("treasure_hoarder")
                         .executes(SkyblockCounterCommand::switchToTreasureHoarder))
-                .then(literal("corleonite_boss")
+                .then(literal("corleone")
                         .executes(SkyblockCounterCommand::switchToCorleoniteBoss))
                 .then(literal("zealot")
                         .executes(SkyblockCounterCommand::switchToZealot))
@@ -80,8 +80,8 @@ public class SkyblockCounterCommand {
     }
 
     private static int switchToCorleoniteBoss(CommandContext<FabricClientCommandSource> context) {
-        SkyblockCounterService.switchMob("team_treasurite_corleone_200", "Corleonite Boss");
-        context.getSource().sendFeedback(Text.literal("Switched to Corleonite Boss"));
+        SkyblockCounterService.switchMob("team_treasurite_corleone_200", "Corleone");
+        context.getSource().sendFeedback(Text.literal("Switched to Corleone"));
         return 1;
     }
 
