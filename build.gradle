@@ -17,6 +17,10 @@ repositories {
 		name = "DevAuth"
 		url = "https://pkgs.dev.azure.com/djtheredstoner/DevAuth/_packaging/public/maven/v1"
 	}
+	maven {
+		name = "Jitpack"
+		url = "https://jitpack.io"
+	}
 }
 
 fabricApi {

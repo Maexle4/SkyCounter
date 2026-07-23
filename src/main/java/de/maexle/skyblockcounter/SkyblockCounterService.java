@@ -10,6 +10,10 @@ import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientEntityEvents;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.List;
@@ -17,10 +21,20 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.zip.GZIPInputStream;
+import java.util.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.Map;
 import java.util.HashMap;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtElement;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.sound.SoundEvents;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.minecraft.entity.Entity;
+import java.util.HashSet;
+import java.util.Set;
 
 public class SkyblockCounterService {
 
@@ -36,6 +50,11 @@ public class SkyblockCounterService {
     private static volatile int hudY;
     private static volatile int startSessionKills = 0;
     private static volatile boolean showSessionKills = false;
+    private static volatile boolean showCorleonitePercentage = false;
+    private static volatile int cachedCorleoniteCount = 0;
+
+    private static volatile int localSessionKills = 0;
+    private static volatile int localSessionStartCorleonite = 0;
 
     private static final Identifier TREASURE_HOARDER_HEAD = Identifier.of("skyblockcounter", "textures/gui/sprites/treasure_hoarder_head.png");
     private static final Identifier CORLEONE_HEAD = Identifier.of("skyblockcounter", "textures/gui/sprites/boss_corleone_head.png");
@@ -43,6 +62,8 @@ public class SkyblockCounterService {
     private static final int HEAD_SIZE = 16;
 
     List<SkyblockCounterConfig.MobEntry> entries = SkyblockCounterService.getConfig().getMobEntries();
+
+    private static final Set<Integer> knownCorleones = new HashSet<>();
 
     private long lastUnloadTrigger = 0;
 
@@ -78,20 +99,51 @@ public class SkyblockCounterService {
 
         registerHudRenderer();
 
-        // Angepasster Event-Listener
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (client.world != null) {
+                for (Entity entity : client.world.getEntities()) {
+                    if (entity.getCustomName() != null) {
+                        String name = entity.getCustomName().getString();
+
+                        if (name.contains("Corleone") && !knownCorleones.contains(entity.getId())) {
+                            knownCorleones.add(entity.getId());
+                            LOGGER.info("[DEBUG] " + name + " hat jetzt einen Namen! Spiele Sound 3x ab...");
+
+                            for (int i = 0; i < 3; i++) {
+                                scheduler.schedule(() -> {
+                                    client.execute(() -> {
+                                        if (client.player != null) {
+                                            client.player.playSound(SoundEvents.BLOCK_ANVIL_LAND, 20.0F, 1.0F);
+                                        }
+                                    });
+                                }, (long) i * 300, TimeUnit.MILLISECONDS);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
         ClientEntityEvents.ENTITY_UNLOAD.register((entity, world) -> {
+            knownCorleones.remove(entity.getId());
+
             if (entity.getCustomName() != null) {
                 String name = entity.getCustomName().getString();
 
-                if (name.contains("Corleone") || name.contains("Treasure Hoarder")) {
+                if (name.contains("Corleone")) {
                     long now = System.currentTimeMillis();
-                    // 2 Sekunden Cooldown, damit nicht mehrere Trigger gleichzeitig feuern
                     if (now - lastUnloadTrigger > 2000) {
                         lastUnloadTrigger = now;
-                        LOGGER.info("[DEBUG] " + name + " aus der Welt geladen! API-Update in 1 Sekunde...");
 
-                        // Führe das API-Update verzögert nach genau 1 Sekunde aus
-                        scheduler.schedule(this::fetchCurrentBestiaryKills, 1, TimeUnit.SECONDS);
+                        if (showSessionKills) {
+                            localSessionKills++;
+                            LOGGER.info("[DEBUG] " + name + " getötet! Lokale Session-Kills: " + localSessionKills);
+                            scheduler.schedule(this::pingForNextCorleone, 120, TimeUnit.SECONDS);
+                        } else {
+                            LOGGER.info("[DEBUG] " + name + " aus der Welt geladen! API-Update in 1 Sekunde...");
+                            scheduler.schedule(this::fetchCurrentBestiaryKills, 1, TimeUnit.SECONDS);
+                            scheduler.schedule(this::pingForNextCorleone, 120, TimeUnit.SECONDS);
+                        }
                     }
                 }
             }
@@ -101,7 +153,26 @@ public class SkyblockCounterService {
         scheduler.scheduleAtFixedRate(this::fetchCurrentBestiaryKills, 0, 30, TimeUnit.SECONDS);
     }
 
+    private void pingForNextCorleone() {
+        if(isShowSessionKills()){
+            MinecraftClient client = MinecraftClient.getInstance();
+            if (client.player != null) {
+                for (int i = 0; i < 3; i++) {
+                    scheduler.schedule(() -> {
+                        client.execute(() -> {
+                            if (client.player != null) {
+                                client.player.playSound(SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP, 25.0F, 1.0F);
+                            }
+                        });
+                    }, (long) i * 300, TimeUnit.MILLISECONDS);
+                }
+            }
+        }
+    }
+
     private void fetchCurrentBestiaryKills() {
+        if (showSessionKills) return;
+
         retrieveBestiaryKillsAsync(undashedUuid, currentMobId)
                 .thenAccept(kills -> {
                     if (kills >= 0) {
@@ -140,8 +211,22 @@ public class SkyblockCounterService {
 
         int xPos = hudX;
         int yPos = hudY;
-        int displayKills = showSessionKills ? (currentKills - startSessionKills) : currentKills;
-        String text = /*currentMobName + " Kills: " +*/ "" + displayKills;
+
+        int displayKills = showSessionKills ? localSessionKills : currentKills;
+        String text = "" + displayKills;
+
+        if (showSessionKills && showCorleonitePercentage && displayKills > 0) {
+            int currentLocalCorleonite = getLocalCorleoniteCount();
+            int sessionDrops = Math.max(0, currentLocalCorleonite - localSessionStartCorleonite);
+
+            double percentage = (currentLocalCorleonite * 100.0) / displayKills;
+            text = displayKills + " | " + String.format("%.2f%%", percentage);
+
+        } else if (!showSessionKills && showCorleonitePercentage && displayKills > 0) {
+            // Fallback für den normalen API-Modus (außerhalb der Session)
+            double percentage = (cachedCorleoniteCount * 100.0) / displayKills;
+            text = displayKills + " | " + String.format("%.2f%%", percentage);
+        }
 
         Identifier headTexture = MOB_TEXTURES.getOrDefault(currentMobId, TREASURE_HOARDER_HEAD);
 
@@ -298,9 +383,9 @@ public class SkyblockCounterService {
 
     public static void setShowSessionKills(boolean show) {
         if (show && !showSessionKills) {
-            // Beim Aktivieren: Start-Kills auf aktuelle Kills setzen
-            startSessionKills = currentKills;
-            LOGGER.info("Session-Kills Modus aktiviert. Start-Kills: " + startSessionKills);
+            localSessionKills = 0;
+            localSessionStartCorleonite = getLocalCorleoniteCount();
+            LOGGER.info("Session-Kills Modus aktiviert. Lokale Kills: 0, Start-Corleonite: " + localSessionStartCorleonite);
         } else if (!show) {
             LOGGER.info("Session-Kills Modus deaktiviert");
         }
@@ -308,12 +393,42 @@ public class SkyblockCounterService {
     }
 
     public static int getSessionKills() {
-        return currentKills - startSessionKills;
+        return showSessionKills ? localSessionKills : 0;
+    }
+
+    public static boolean isShowCorleonitePercentage() {
+        return showCorleonitePercentage;
+    }
+
+    public static void setShowCorleonitePercentage(boolean show) {
+        showCorleonitePercentage = show;
+        if (show) {
+            // Refresh Corleonite count when enabling
+            getCorleoniteCount().thenAccept(count -> {
+                cachedCorleoniteCount = count;
+                LOGGER.info("Corleonite count cached: " + count);
+            });
+        }
+    }
+
+    public static int getCachedCorleoniteCount() {
+        return cachedCorleoniteCount;
     }
 
     public static void setStartSessionKills(int kills) {
-        startSessionKills = kills;
-        LOGGER.info("Start-Kills manuell gesetzt: " + kills);
+        localSessionKills = kills;
+    }
+
+    public static void addStartSessionKills(int kills) {
+        localSessionKills += kills;
+    }
+
+    public static void setApiKey(String key) {
+        API_KEY = key;
+    }
+
+    public static void setUndashedUuid(String uuid) {
+        undashedUuid = uuid;
     }
 
     public static void switchMob(String mobId, String mobName) {
@@ -332,6 +447,13 @@ public class SkyblockCounterService {
                     if (kills >= 0) {
                         currentKills = kills;
                         LOGGER.info("Updated " + mobName + " Kills: " + kills);
+                        // Update Corleonite count when kills are updated
+                        if (showCorleonitePercentage) {
+                            getCorleoniteCount().thenAccept(count -> {
+                                cachedCorleoniteCount = count;
+                                LOGGER.info("Corleonite count updated: " + count);
+                            });
+                        }
                     }
                 })
                 .exceptionally(ex -> {
@@ -356,5 +478,261 @@ public class SkyblockCounterService {
             }
         }
         LOGGER.info("Mob-Textures neu geladen: " + MOB_TEXTURES.size() + " Mobs");
+    }
+
+    private static int getLocalCorleoniteCount() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player == null) return 0;
+
+        int count = 0;
+        for (int i = 0; i < client.player.getInventory().size(); i++) {
+            net.minecraft.item.ItemStack stack = client.player.getInventory().getStack(i);
+            if (!stack.isEmpty() && stack.getName().getString().contains("Corleonite")) {
+                count += stack.getCount();
+            }
+        }
+        return count;
+    }
+
+    public static CompletableFuture<Integer> getCorleoniteCount() {
+        return CompletableFuture.supplyAsync(() -> {
+            String spec = "https://api.hypixel.net/v2/skyblock/profiles?uuid=" + undashedUuid;
+            HttpURLConnection connection = null;
+            try {
+                URL url = new URL(spec);
+                connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("GET");
+                connection.setRequestProperty("API-Key", API_KEY);
+
+                int responseCode = connection.getResponseCode();
+                if (responseCode == 200) {
+                    try (BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                        StringBuilder response = new StringBuilder();
+                        String line;
+                        while ((line = in.readLine()) != null) {
+                            response.append(line);
+                        }
+
+                        JSONObject data = new JSONObject(response.toString());
+                        if (!data.optBoolean("success", false)) {
+                            return -1;
+                        }
+
+                        JSONArray profiles = data.optJSONArray("profiles");
+                        if (profiles == null || profiles.length() == 0) {
+                            return -1;
+                        }
+
+                        for (int i = 0; i < profiles.length(); i++) {
+                            JSONObject profile = profiles.getJSONObject(i);
+                            if (profile.optBoolean("selected", false)) {
+                                JSONObject members = profile.optJSONObject("members");
+                                if (members != null) {
+                                    String targetKey = members.has(undashedUuid) ? undashedUuid : (members.has(undashedUuid.replace("-", "")) ? undashedUuid.replace("-", "") : null);
+                                    if (targetKey != null) {
+                                        JSONObject memberData = members.getJSONObject(targetKey);
+                                        return countCorleoniteInInventory(memberData);
+                                    }
+                                }
+                            }
+                        }
+
+                        // Fallback to first profile
+                        JSONObject firstProfile = profiles.getJSONObject(0);
+                        JSONObject members = firstProfile.optJSONObject("members");
+                        if (members != null) {
+                            for (String key : members.keySet()) {
+                                JSONObject memberData = members.getJSONObject(key);
+                                int count = countCorleoniteInInventory(memberData);
+                                if (count >= 0) {
+                                    return count;
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                LOGGER.error("Fehler beim Abrufen des Inventars: " + e.getMessage(), e);
+            } finally {
+                if (connection != null) {
+                    connection.disconnect();
+                }
+            }
+            return -1;
+        });
+    }
+
+    private static int countCorleoniteInInventory(JSONObject memberData) {
+        try {
+            LOGGER.info("[DEBUG] countCorleoniteInInventory called");
+            LOGGER.info("[DEBUG] MemberData keys: " + memberData.keySet());
+            int corleoniteCount = 0;
+
+            String[] inventoryKeys = {"inventory"};
+
+            for (String key : inventoryKeys) {
+                JSONObject inventory = memberData.optJSONObject(key);
+                LOGGER.info("[DEBUG] Inventory " + key + " exists: " + (inventory != null));
+                if (inventory != null) {
+                    LOGGER.info("[DEBUG] Inventory " + key + " keys: " + inventory.keySet());
+                    String data = inventory.optString("data", "");
+                    LOGGER.info("[DEBUG] Inventory " + key + " has data field: " + !data.isEmpty());
+
+                    if (!data.isEmpty()) {
+                        LOGGER.info("[DEBUG] Checking inventory: " + key);
+                        int count = countCorleoniteInNBT(data);
+                        LOGGER.info("[DEBUG] Found " + count + " Corleonite in " + key);
+                        corleoniteCount += count;
+                    } else {
+                        for (String itemKey : inventory.keySet()) {
+                            LOGGER.info("[DEBUG] Checking field: " + itemKey);
+                            Object itemValue = inventory.get(itemKey);
+
+                            if (itemValue instanceof JSONObject) {
+                                JSONObject nestedObj = (JSONObject) itemValue;
+                                String nestedData = nestedObj.optString("data", "");
+                                if (!nestedData.isEmpty()) {
+                                    LOGGER.info("[DEBUG] Field " + itemKey + " has data, trying to parse");
+                                    int count = countCorleoniteInNBT(nestedData);
+                                    LOGGER.info("[DEBUG] Found " + count + " Corleonite in " + itemKey);
+                                    corleoniteCount += count;
+                                } else {
+                                    LOGGER.info("[DEBUG] Field " + itemKey + " has no data field");
+                                }
+                            } else if (itemValue instanceof String) {
+                                String itemStr = (String) itemValue;
+                                if (!itemStr.isEmpty() && itemStr.length() > 10) {
+                                    LOGGER.info("[DEBUG] Field " + itemKey + " might contain data, trying to parse");
+                                    int count = countCorleoniteInNBT(itemStr);
+                                    LOGGER.info("[DEBUG] Found " + count + " Corleonite in " + itemKey);
+                                    corleoniteCount += count;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            LOGGER.info("Corleonite im Inventar gefunden: " + corleoniteCount);
+            return corleoniteCount;
+
+        } catch (Exception e) {
+            LOGGER.error("Fehler in countCorleoniteInInventory: " + e.getMessage(), e);
+            return -1;
+        }
+    }
+
+    private static int countCorleoniteInNBT(String base64Data) {
+        int count = 0;
+        try {
+            // Handle unicode escapes in base64
+            String cleanedData = base64Data.replace("\\u003d", "=");
+            
+            byte[] decoded = Base64.getDecoder().decode(cleanedData);
+            
+            ByteArrayInputStream bais = new ByteArrayInputStream(decoded);
+            GZIPInputStream gzis = new GZIPInputStream(bais);
+            DataInputStream dis = new DataInputStream(gzis);
+            NbtCompound nbt = NbtIo.readCompound(dis);
+            dis.close();
+            
+            if (nbt != null && nbt.contains("i")) {
+                var itemsList = nbt.getList("i");
+                if (itemsList.isPresent()) {
+                    LOGGER.info("[DEBUG] NBT contains " + itemsList.get().size() + " items");
+                    for (NbtElement itemTag : itemsList.get()) {
+                        if (itemTag instanceof NbtCompound) {
+                            NbtCompound item = (NbtCompound) itemTag;
+                            if (item.contains("tag")) {
+                                var tagOpt = item.getCompound("tag");
+                                if (tagOpt.isPresent()) {
+                                    NbtCompound tag = tagOpt.get();
+                                    if (tag.contains("display")) {
+                                        var displayOpt = tag.getCompound("display");
+                                        if (displayOpt.isPresent()) {
+                                            NbtCompound display = displayOpt.get();
+                                            if (display.contains("Name")) {
+                                                var nameOpt = display.getString("Name");
+                                                if (nameOpt.isPresent()) {
+                                                    String itemName = nameOpt.get();
+                                                    LOGGER.info("[DEBUG] Found item: " + itemName);
+                                                    if (itemName.contains("Corleonite")) {
+                                                        LOGGER.info("[DEBUG] Found Corleonite item!");
+                                                        if (item.contains("Count")) {
+                                                            var countOpt = item.getInt("Count");
+                                                            if (countOpt.isPresent()) {
+                                                                count += countOpt.get();
+                                                                LOGGER.info("[DEBUG] Corleonite count: " + countOpt.get());
+                                                            } else {
+                                                                count += 1;
+                                                                LOGGER.info("[DEBUG] Corleonite count: 1 (default)");
+                                                            }
+                                                        } else {
+                                                            count += 1;
+                                                            LOGGER.info("[DEBUG] Corleonite count: 1 (no Count tag)");
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                LOGGER.info("[DEBUG] NBT is null or does not contain 'i' key");
+            }
+        } catch (IOException e) {
+            LOGGER.error("Fehler beim Parsen von NBT-Daten: " + e.getMessage(), e);
+        } catch (Exception e) {
+            LOGGER.error("Fehler beim Dekodieren der Inventarsdaten: " + e.getMessage(), e);
+        }
+        return count;
+    }
+
+    public static String getCorleoniteDropPercentage() {
+        int corleoniteCount = getLocalCorleoniteCount();
+
+        if (corleoniteCount < 0) {
+            return "Fehler beim Abrufen der Corleonite-Anzahl";
+        }
+
+        int sessionKills = getSessionKills();
+        if (sessionKills <= 0) {
+            return "Session-Kills sind 0 oder Session-Modus nicht aktiv";
+        }
+
+        double percentage = (corleoniteCount * 100.0) / sessionKills;
+        if (!showCorleonitePercentage) {
+            showCorleonitePercentage = true;
+        } else {
+            showCorleonitePercentage = false;
+        }
+        cachedCorleoniteCount = corleoniteCount;
+        return String.format("Corleonite: %d | Session-Kills: %d | Drop-Rate: %.2f%%", corleoniteCount, sessionKills, percentage);
+    }
+
+    public static CompletableFuture<String> getCorleoniteDropPercentageAPI() {
+        return getCorleoniteCount().thenApply(corleoniteCount -> {
+            if (corleoniteCount < 0) {
+                return "Fehler beim Abrufen der Corleonite-Anzahl";
+            }
+
+            int sessionKills = getSessionKills();
+            if (sessionKills <= 0) {
+                return "Session-Kills sind 0 oder Session-Modus nicht aktiv";
+            }
+
+            double percentage = (corleoniteCount * 100.0) / sessionKills;
+            if (!showCorleonitePercentage) {
+                showCorleonitePercentage = true;
+            } else {
+                showCorleonitePercentage = false;
+            }
+            cachedCorleoniteCount = corleoniteCount;
+            return String.format("Corleonite: %d | Session-Kills: %d | Drop-Rate: %.2f%%", corleoniteCount, sessionKills, percentage);
+        });
     }
 }

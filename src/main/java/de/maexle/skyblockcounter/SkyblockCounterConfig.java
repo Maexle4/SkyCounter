@@ -137,16 +137,16 @@ public class SkyblockCounterConfig {
         return API_KEY;
     }
     
-    public void setAPI_KEY(String API_KEYY) {
-        this.API_KEY = API_KEYY;
+    public void setAPI_KEY(String API_KEY) {
+        this.API_KEY = API_KEY;
     }
 
     public String getundashedUuid() {
         return undashedUuid;
     }
 
-    public void setundashedUuid(String undashedUuidd) {
-        this.undashedUuid = undashedUuidd;
+    public void setundashedUuid(String undashedUuid) {
+        this.undashedUuid = undashedUuid;
     }
 
     public String getLastMobName() {
