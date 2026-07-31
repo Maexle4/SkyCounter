@@ -1,6 +1,6 @@
 # SkyCounter
 
-SkyCounter is a client-side Fabric mod for **Minecraft 1.21.1** (Hypixel Skyblock) that tracks mob kills via the Hypixel API and session data. Press `O` to open the config GUI, or `H` to toggle the HUD.
+SkyCounter is a client-side Fabric mod for **Minecraft 1.21.11** (Hypixel Skyblock) that tracks mob kills via the Hypixel API and session data. Press `O` to open the config GUI, or `H` to toggle the HUD.
 
 ---
 
