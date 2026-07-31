@@ -65,6 +65,8 @@ public class SkyblockCounterService {
 
     private static final Set<Integer> knownCorleones = new HashSet<>();
 
+    public static long sessionStartTime = 0;
+
     private long lastUnloadTrigger = 0;
 
     private static final Map<String, Identifier> MOB_TEXTURES = new HashMap<>();
@@ -73,13 +75,14 @@ public class SkyblockCounterService {
     static {
         config = SkyblockCounterConfig.load();
         hudX = config.getHudX();
+        guiVisible = config.isHudVisible();
+        showCorleonitePercentage = config.isShowCorleonitePercentage();
         API_KEY = config.getAPI_KEY();
         undashedUuid = config.getundashedUuid();
         hudY = config.getHudY();
         currentMobId = config.getLastMobId();
         currentMobName = config.getLastMobName();
-        
-        // Build MOB_TEXTURES from config entries
+
         for (SkyblockCounterConfig.MobEntry entry : config.getMobEntries()) {
             if (entry.texture != null) {
                 MOB_TEXTURES.put(entry.id, Identifier.of("skyblockcounter", entry.texture));
@@ -149,7 +152,7 @@ public class SkyblockCounterService {
             }
         });
 
-        // Alle 30 Sekunden standardmäßig abfragen
+        // 30s
         scheduler.scheduleAtFixedRate(this::fetchCurrentBestiaryKills, 0, 30, TimeUnit.SECONDS);
     }
 
@@ -223,7 +226,6 @@ public class SkyblockCounterService {
             text = displayKills + " | " + String.format("%.2f%%", percentage);
 
         } else if (!showSessionKills && showCorleonitePercentage && displayKills > 0) {
-            // Fallback für den normalen API-Modus (außerhalb der Session)
             double percentage = (cachedCorleoniteCount * 100.0) / displayKills;
             text = displayKills + " | " + String.format("%.2f%%", percentage);
         }
@@ -350,6 +352,8 @@ public class SkyblockCounterService {
 
     public static void setGuiVisible(boolean visible) {
         guiVisible = visible;
+        config.setHudVisible(visible);
+        config.save();
     }
 
     public static int getCurrentKills() {
@@ -385,7 +389,11 @@ public class SkyblockCounterService {
         if (show && !showSessionKills) {
             localSessionKills = 0;
             localSessionStartCorleonite = getLocalCorleoniteCount();
+
+            sessionStartTime = System.currentTimeMillis();
+
             LOGGER.info("Session-Kills Modus aktiviert. Lokale Kills: 0, Start-Corleonite: " + localSessionStartCorleonite);
+
         } else if (!show) {
             LOGGER.info("Session-Kills Modus deaktiviert");
         }
@@ -402,8 +410,9 @@ public class SkyblockCounterService {
 
     public static void setShowCorleonitePercentage(boolean show) {
         showCorleonitePercentage = show;
+        config.setShowCorleonitePercentage(show);
+        config.save();
         if (show) {
-            // Refresh Corleonite count when enabling
             getCorleoniteCount().thenAccept(count -> {
                 cachedCorleoniteCount = count;
                 LOGGER.info("Corleonite count cached: " + count);
@@ -419,8 +428,14 @@ public class SkyblockCounterService {
         localSessionKills = kills;
     }
 
-    public static void addStartSessionKills(int kills) {
+    public static void addSessionKills(int kills) {
         localSessionKills += kills;
+    }
+
+    public static void removeSessionKills(int kills) {
+        if ((localSessionKills - kills) >= 0){
+            localSessionKills -= kills;
+        }
     }
 
     public static void setApiKey(String key) {
@@ -447,7 +462,6 @@ public class SkyblockCounterService {
                     if (kills >= 0) {
                         currentKills = kills;
                         LOGGER.info("Updated " + mobName + " Kills: " + kills);
-                        // Update Corleonite count when kills are updated
                         if (showCorleonitePercentage) {
                             getCorleoniteCount().thenAccept(count -> {
                                 cachedCorleoniteCount = count;
@@ -480,7 +494,7 @@ public class SkyblockCounterService {
         LOGGER.info("Mob-Textures neu geladen: " + MOB_TEXTURES.size() + " Mobs");
     }
 
-    private static int getLocalCorleoniteCount() {
+    public static int getLocalCorleoniteCount() {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null) return 0;
 
@@ -537,7 +551,6 @@ public class SkyblockCounterService {
                             }
                         }
 
-                        // Fallback to first profile
                         JSONObject firstProfile = profiles.getJSONObject(0);
                         JSONObject members = firstProfile.optJSONObject("members");
                         if (members != null) {
@@ -562,7 +575,7 @@ public class SkyblockCounterService {
         });
     }
 
-    private static int countCorleoniteInInventory(JSONObject memberData) {
+    public static int countCorleoniteInInventory(JSONObject memberData) {
         try {
             LOGGER.info("[DEBUG] countCorleoniteInInventory called");
             LOGGER.info("[DEBUG] MemberData keys: " + memberData.keySet());
@@ -625,7 +638,6 @@ public class SkyblockCounterService {
     private static int countCorleoniteInNBT(String base64Data) {
         int count = 0;
         try {
-            // Handle unicode escapes in base64
             String cleanedData = base64Data.replace("\\u003d", "=");
             
             byte[] decoded = Base64.getDecoder().decode(cleanedData);

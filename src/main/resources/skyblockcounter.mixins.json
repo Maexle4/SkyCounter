@@ -1,12 +1,11 @@
 {
 	"required": true,
-	"package": "de.maexle.skyblockcounter.mixin",
+	"package": "de.maexle.skyblockcounter.mixins",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
-		"ExampleMixin"
 	],
 	"injectors": {
-		"defaultRequire": 1
+		"defaultRequire": 0
 	},
 	"overwrites": {
 		"requireAnnotations": true

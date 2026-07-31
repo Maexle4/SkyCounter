@@ -18,6 +18,8 @@ public class SkyblockCounterConfig {
 
     private int hudX = 10;
     private int hudY = 10;
+    private boolean hudVisible = false;
+    private boolean showCorleonitePercentage = false;
     private String lastMobId = "zealot_enderman_55";
     private String lastMobName = "Zealot";
     public List<MobEntry> mobEntries = new ArrayList<>();
@@ -37,6 +39,22 @@ public class SkyblockCounterConfig {
         }
     }
 
+    public List<WaypointEntry> waypoints = new ArrayList<>();
+
+    public static class WaypointEntry {
+        public String name;
+        public int x, y, z;
+        public int color;
+
+        public WaypointEntry(String name, int x, int y, int z, int color) {
+            this.name = name;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.color = color;
+        }
+    }
+
     public static SkyblockCounterConfig load() {
         if (!CONFIG_FILE.exists()) {
             return new SkyblockCounterConfig();
@@ -48,6 +66,8 @@ public class SkyblockCounterConfig {
             
             if (json.has("hudX")) config.hudX = json.get("hudX").getAsInt();
             if (json.has("hudY")) config.hudY = json.get("hudY").getAsInt();
+            if (json.has("hudVisible")) config.hudVisible = json.get("hudVisible").getAsBoolean();
+            if (json.has("showCorleonitePercentage")) config.showCorleonitePercentage = json.get("showCorleonitePercentage").getAsBoolean();
             if (json.has("lastMobId")) config.lastMobId = json.get("lastMobId").getAsString();
             if (json.has("lastMobName")) config.lastMobName = json.get("lastMobName").getAsString();
             if (json.has("API_KEY")) config.API_KEY = json.get("API_KEY").getAsString();
@@ -70,6 +90,18 @@ public class SkyblockCounterConfig {
                 config.mobEntries.add(new MobEntry("zealot_enderman_55", "Zealot", "textures/gui/sprites/zealot_enderman_head.png"));
             }
 
+            if (json.has("waypoints")) {
+                JsonArray waypointsArray = json.getAsJsonArray("waypoints");
+                for (int i = 0; i < waypointsArray.size(); i++) {
+                    JsonObject wpObj = waypointsArray.get(i).getAsJsonObject();
+                    String name = wpObj.get("name").getAsString();
+                    int x = wpObj.get("x").getAsInt();
+                    int y = wpObj.get("y").getAsInt();
+                    int z = wpObj.get("z").getAsInt();
+                    int color = wpObj.has("color") ? wpObj.get("color").getAsInt() : 0xFFFF5555;
+                    config.waypoints.add(new WaypointEntry(name, x, y, z, color));
+                }
+            }
             return config;
         } catch (IOException e) {
             e.printStackTrace();
@@ -83,6 +115,8 @@ public class SkyblockCounterConfig {
             JsonObject json = new JsonObject();
             json.addProperty("hudX", hudX);
             json.addProperty("hudY", hudY);
+            json.addProperty("hudVisible", hudVisible);
+            json.addProperty("showCorleonitePercentage", showCorleonitePercentage);
             json.addProperty("lastMobId", lastMobId);
             json.addProperty("lastMobName", lastMobName);
 
@@ -100,6 +134,18 @@ public class SkyblockCounterConfig {
                 entriesArray.add(entryObj);
             }
             json.add("mobEntries", entriesArray);
+
+            JsonArray waypointsArray = new JsonArray();
+            for (WaypointEntry wp : waypoints) {
+                JsonObject wpObj = new JsonObject();
+                wpObj.addProperty("name", wp.name);
+                wpObj.addProperty("x", wp.x);
+                wpObj.addProperty("y", wp.y);
+                wpObj.addProperty("z", wp.z);
+                wpObj.addProperty("color", wp.color);
+                waypointsArray.add(wpObj);
+            }
+            json.add("waypoints", waypointsArray);
             
             try (FileWriter writer = new FileWriter(CONFIG_FILE)) {
                 GSON.toJson(json, writer);
@@ -108,7 +154,28 @@ public class SkyblockCounterConfig {
             e.printStackTrace();
         }
     }
-    
+
+    public void addWaypoint(String name, int x, int y, int z, int color) {
+        boolean foundWaypoint = false;
+        for(WaypointEntry existingWP : waypoints){
+            if(!(existingWP.x == x) && !foundWaypoint) {
+                foundWaypoint = false;
+            } else {
+                foundWaypoint = true;
+                break;
+            }
+        }
+        if(!foundWaypoint) {
+                waypoints.add(new WaypointEntry(name, x, y, z, color));
+                save();
+        }
+    }
+
+    public void removeWaypoint(String name) {
+        waypoints.removeIf(wp -> wp.name.equals(name));
+        save();
+    }
+
     public int getHudX() {
         return hudX;
     }
@@ -123,6 +190,22 @@ public class SkyblockCounterConfig {
     
     public void setHudY(int hudY) {
         this.hudY = hudY;
+    }
+
+    public boolean isHudVisible() {
+        return hudVisible;
+    }
+
+    public void setHudVisible(boolean hudVisible) {
+        this.hudVisible = hudVisible;
+    }
+
+    public boolean isShowCorleonitePercentage() {
+        return showCorleonitePercentage;
+    }
+
+    public void setShowCorleonitePercentage(boolean showCorleonitePercentage) {
+        this.showCorleonitePercentage = showCorleonitePercentage;
     }
     
     public String getLastMobId() {
