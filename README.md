@@ -26,9 +26,13 @@ SkyCounter is a client-side Fabric mod for **Minecraft 1.21.1** (Hypixel Skybloc
 * `/skycounter set_api <API_KEY>` — Sets your Hypixel API key.
 * `/skycounter set_uuid <UUID>` — Sets your un-dashed player UUID.
 
+---
+
 ## Disclaimer
 
 I have nothing to do with the Hypixel Name or Trademark of Hypixel if there is one.
+
+---
 
 # Screenshots
 
