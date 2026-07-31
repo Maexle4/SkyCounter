@@ -38,3 +38,4 @@ I have nothing to do with the Hypixel Name or Trademark of Hypixel if there is o
 <img width="1914" height="990" alt="Screenshot 2026-07-31 182427" src="https://github.com/user-attachments/assets/7df25466-5d25-4048-bf20-84fd98f718fd" />
 <img width="1908" height="993" alt="Screenshot 2026-07-31 182403" src="https://github.com/user-attachments/assets/fd944f09-25bd-46c5-bcb3-8285e8a67109" />
 <img width="914" height="1000" alt="Screenshot 2026-07-31 182734" src="https://github.com/user-attachments/assets/2e43a778-ea1e-45de-85d3-8bea9d7321d5" />
+<img width="1480" height="552" alt="Screenshot 2026-07-23 220918" src="https://github.com/user-attachments/assets/18eaa7fe-6c89-4d5d-abf8-6c523de53de6" />
