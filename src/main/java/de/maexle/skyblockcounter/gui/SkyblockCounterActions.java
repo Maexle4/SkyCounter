@@ -231,7 +231,7 @@ public final class SkyblockCounterActions {
         List<String> messages = new ArrayList<>();
         List<WaypointManager.Waypoint> foundWaypoints = new ArrayList<>();
 
-        if (!andesitePositions.isEmpty()) {
+        if (andesitePositions.size() > 1) {
             BlockPos centerPos = averagePosition(andesitePositions);
             foundWaypoints.add(new WaypointManager.Waypoint(centerPos, "Corleone Structure 1"));
             messages.add("Corleone structure 1 found at: " + centerPos.toShortString());
