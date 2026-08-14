@@ -1,13 +1,27 @@
 package de.maexle.skyblockcounter;
 
+import net.minecraft.client.renderer.RenderPipelines;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.util.Identifier;
-import net.minecraft.client.gl.RenderPipelines;
-import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.minecraft.client.Minecraft;
+import net.minecraft.resources.Identifier;
+import net.minecraft.client.gui.Gui;
+import net.minecraft.client.gui.*;
+import net.minecraft.client.gui.render.GuiRenderer;
+import net.minecraft.client.gui.screens.*;
+import net.minecraft.client.gui.render.*;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientEntityEvents;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.sounds.SoundEvents;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.ByteArrayInputStream;
@@ -17,24 +31,16 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.Base64;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.GZIPInputStream;
-import java.util.Base64;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import java.util.Map;
-import java.util.HashMap;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
-import net.minecraft.nbt.NbtIo;
-import net.minecraft.sound.SoundEvents;
-import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.minecraft.entity.Entity;
-import java.util.HashSet;
-import java.util.Set;
 
 public class SkyblockCounterService {
 
@@ -56,9 +62,11 @@ public class SkyblockCounterService {
     private static volatile int localSessionKills = 0;
     private static volatile int localSessionStartCorleonite = 0;
 
-    private static final Identifier TREASURE_HOARDER_HEAD = Identifier.of("skyblockcounter", "textures/gui/sprites/treasure_hoarder_head.png");
-    private static final Identifier CORLEONE_HEAD = Identifier.of("skyblockcounter", "textures/gui/sprites/boss_corleone_head.png");
-    private static final Identifier ZEALOT_HEAD = Identifier.of("skyblockcounter", "textures/gui/sprites/zealot_enderman_head.png");
+
+    private static final Identifier TREASURE_HOARDER_HEAD = Identifier.fromNamespaceAndPath("skyblockcounter", "treasure_hoarder_head");
+    private static final Identifier CORLEONE_HEAD = Identifier.fromNamespaceAndPath("skyblockcounter", "boss_corleone_head");
+    private static final Identifier ZEALOT_HEAD = Identifier.fromNamespaceAndPath("skyblockcounter", "zealot_enderman_head");
+
     private static final int HEAD_SIZE = 16;
 
     List<SkyblockCounterConfig.MobEntry> entries = SkyblockCounterService.getConfig().getMobEntries();
@@ -85,10 +93,11 @@ public class SkyblockCounterService {
 
         for (SkyblockCounterConfig.MobEntry entry : config.getMobEntries()) {
             if (entry.texture != null) {
-                MOB_TEXTURES.put(entry.id, Identifier.of("skyblockcounter", entry.texture));
+                MOB_TEXTURES.put(entry.id, Identifier.fromNamespaceAndPath("skyblockcounter", entry.texture));
             }
         }
     }
+
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
         Thread thread = new Thread(runnable);
         thread.setDaemon(true);
@@ -103,8 +112,8 @@ public class SkyblockCounterService {
         registerHudRenderer();
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            if (client.world != null) {
-                for (Entity entity : client.world.getEntities()) {
+            if (client.level != null) {
+                for (Entity entity : client.level.entitiesForRendering()) {
                     if (entity.getCustomName() != null) {
                         String name = entity.getCustomName().getString();
 
@@ -116,7 +125,7 @@ public class SkyblockCounterService {
                                 scheduler.schedule(() -> {
                                     client.execute(() -> {
                                         if (client.player != null) {
-                                            client.player.playSound(SoundEvents.BLOCK_ANVIL_LAND, 20.0F, 1.0F);
+                                            client.player.playSound(SoundEvents.ANVIL_LAND, 20.0F, 1.0F);
                                         }
                                     });
                                 }, (long) i * 300, TimeUnit.MILLISECONDS);
@@ -158,13 +167,13 @@ public class SkyblockCounterService {
 
     private void pingForNextCorleone() {
         if(isShowSessionKills()){
-            MinecraftClient client = MinecraftClient.getInstance();
+            Minecraft client = Minecraft.getInstance();
             if (client.player != null) {
                 for (int i = 0; i < 3; i++) {
                     scheduler.schedule(() -> {
                         client.execute(() -> {
                             if (client.player != null) {
-                                client.player.playSound(SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP, 25.0F, 1.0F);
+                                client.player.playSound(SoundEvents.EXPERIENCE_ORB_PICKUP, 25.0F, 1.0F);
                             }
                         });
                     }, (long) i * 300, TimeUnit.MILLISECONDS);
@@ -189,26 +198,32 @@ public class SkyblockCounterService {
     }
 
     private void registerHudRenderer() {
-        HudRenderCallback.EVENT.register((drawContext, tickCounter) -> {
-            if (guiVisible) {
-                renderHud(drawContext);
-            }
-        });
+        HudElementRegistry.addLast(
+                Identifier.fromNamespaceAndPath("skyblockcounter", "hud_element"),
+                (drawContext, tickCounter) -> {
+                    if (guiVisible) {
+                        renderHud(drawContext);
+                    }
+                }
+        );
     }
 
-    private void renderHud(DrawContext drawContext) {
+    private void renderHud(GuiGraphicsExtractor drawContext) {
         if (entries.isEmpty()) {
             SkyblockCounterConfig config = SkyblockCounterService.getConfig();
-            config.mobEntries.add(new SkyblockCounterConfig.MobEntry("treasure_hoarder_70", "Treasure Hoarder", "textures/gui/sprites/treasure_hoarder_head.png"));
-            config.mobEntries.add(new SkyblockCounterConfig.MobEntry("team_treasurite_corleone_200", "Corleonite Boss", "textures/gui/sprites/boss_corleone_head.png"));
-            config.mobEntries.add(new SkyblockCounterConfig.MobEntry("zealot_enderman_55", "Zealot", "textures/gui/sprites/zealot_enderman_head.png"));
+
+            config.mobEntries.add(new SkyblockCounterConfig.MobEntry("treasure_hoarder_70", "Treasure Hoarder", "treasure_hoarder_head"));
+            config.mobEntries.add(new SkyblockCounterConfig.MobEntry("team_treasurite_corleone_200", "Corleonite Boss", "boss_corleone_head"));
+            config.mobEntries.add(new SkyblockCounterConfig.MobEntry("zealot_enderman_55", "Zealot", "zealot_enderman_head"));
+
             config.save();
+
             SkyblockCounterService.reloadMobTextures();
         }
 
-        MinecraftClient mc = MinecraftClient.getInstance();
+        Minecraft mc = Minecraft.getInstance();
 
-        if (mc.player == null || mc.world == null || mc.options.hudHidden) {
+        if (mc.player == null || mc.level == null || mc.options.hideGui) {
             return;
         }
 
@@ -220,7 +235,6 @@ public class SkyblockCounterService {
 
         if (showSessionKills && showCorleonitePercentage && displayKills > 0) {
             int currentLocalCorleonite = getLocalCorleoniteCount();
-            int sessionDrops = Math.max(0, currentLocalCorleonite - localSessionStartCorleonite);
 
             double percentage = (currentLocalCorleonite * 100.0) / displayKills;
             text = displayKills + " | " + String.format("%.2f%%", percentage);
@@ -232,10 +246,10 @@ public class SkyblockCounterService {
 
         Identifier headTexture = MOB_TEXTURES.getOrDefault(currentMobId, TREASURE_HOARDER_HEAD);
 
-        drawContext.drawTexture(RenderPipelines.GUI_TEXTURED, headTexture, xPos, yPos, 0, 0, HEAD_SIZE, HEAD_SIZE, HEAD_SIZE, HEAD_SIZE);
+        drawContext.blitSprite(RenderPipelines.GUI_TEXTURED, headTexture, xPos, yPos, HEAD_SIZE, HEAD_SIZE);
 
         int textX = xPos + HEAD_SIZE + 4;
-        drawContext.drawTextWithShadow(mc.textRenderer, text, textX, yPos + (HEAD_SIZE / 4), 0xFFFFFFFF);
+        drawContext.text(mc.font, text, textX, yPos + (HEAD_SIZE / 4), 0xFFFFFFFF, false);
     }
 
     private static CompletableFuture<Integer> retrieveBestiaryKillsAsync(String uuid, String mobId) {
@@ -488,20 +502,20 @@ public class SkyblockCounterService {
         MOB_TEXTURES.clear();
         for (SkyblockCounterConfig.MobEntry entry : config.getMobEntries()) {
             if (entry.texture != null) {
-                MOB_TEXTURES.put(entry.id, Identifier.of("skyblockcounter", entry.texture));
+                MOB_TEXTURES.put(entry.id, Identifier.fromNamespaceAndPath("skyblockcounter", entry.texture));
             }
         }
         LOGGER.info("Mob-Textures neu geladen: " + MOB_TEXTURES.size() + " Mobs");
     }
 
     public static int getLocalCorleoniteCount() {
-        MinecraftClient client = MinecraftClient.getInstance();
+        Minecraft client = Minecraft.getInstance();
         if (client.player == null) return 0;
 
         int count = 0;
-        for (int i = 0; i < client.player.getInventory().size(); i++) {
-            net.minecraft.item.ItemStack stack = client.player.getInventory().getStack(i);
-            if (!stack.isEmpty() && stack.getName().getString().contains("Corleonite")) {
+        for (int i = 0; i < client.player.getInventory().getContainerSize(); i++) {
+            ItemStack stack = client.player.getInventory().getItem(i);
+            if (!stack.isEmpty() && stack.getHoverName().getString().contains("Corleonite")) {
                 count += stack.getCount();
             }
         }
@@ -639,30 +653,30 @@ public class SkyblockCounterService {
         int count = 0;
         try {
             String cleanedData = base64Data.replace("\\u003d", "=");
-            
+
             byte[] decoded = Base64.getDecoder().decode(cleanedData);
-            
+
             ByteArrayInputStream bais = new ByteArrayInputStream(decoded);
             GZIPInputStream gzis = new GZIPInputStream(bais);
             DataInputStream dis = new DataInputStream(gzis);
-            NbtCompound nbt = NbtIo.readCompound(dis);
+            CompoundTag nbt = NbtIo.read(dis);
             dis.close();
-            
+
             if (nbt != null && nbt.contains("i")) {
                 var itemsList = nbt.getList("i");
                 if (itemsList.isPresent()) {
                     LOGGER.info("[DEBUG] NBT contains " + itemsList.get().size() + " items");
-                    for (NbtElement itemTag : itemsList.get()) {
-                        if (itemTag instanceof NbtCompound) {
-                            NbtCompound item = (NbtCompound) itemTag;
+                    for (Tag itemTag : itemsList.get()) {
+                        if (itemTag instanceof CompoundTag) {
+                            CompoundTag item = (CompoundTag) itemTag;
                             if (item.contains("tag")) {
                                 var tagOpt = item.getCompound("tag");
                                 if (tagOpt.isPresent()) {
-                                    NbtCompound tag = tagOpt.get();
+                                    CompoundTag tag = tagOpt.get();
                                     if (tag.contains("display")) {
                                         var displayOpt = tag.getCompound("display");
                                         if (displayOpt.isPresent()) {
-                                            NbtCompound display = displayOpt.get();
+                                            CompoundTag display = displayOpt.get();
                                             if (display.contains("Name")) {
                                                 var nameOpt = display.getString("Name");
                                                 if (nameOpt.isPresent()) {

@@ -4,11 +4,10 @@ import de.maexle.skyblockcounter.SkyblockCounterConfig;
 import de.maexle.skyblockcounter.SkyblockCounterService;
 import de.maexle.skyblockcounter.waypoint.WaypointManager;
 import de.maexle.skyblockcounter.command.SkyblockCounterCommand;
-import net.minecraft.client.gui.Click;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.text.Text;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.network.chat.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,13 +30,13 @@ public class SkyblockCounterConfigScreen extends Screen {
     private ToggleSwitch percentageToggle;
     private ToggleSwitch sessionToggle;
 
-    private TextFieldWidget hudXField;
-    private TextFieldWidget hudYField;
-    private TextFieldWidget apiKeyField;
-    private TextFieldWidget uuidField;
-    private TextFieldWidget mobIdField;
-    private TextFieldWidget mobNameField;
-    private TextFieldWidget mobTextureField;
+    private EditBox hudXField;
+    private EditBox hudYField;
+    private EditBox apiKeyField;
+    private EditBox uuidField;
+    private EditBox mobIdField;
+    private EditBox mobNameField;
+    private EditBox mobTextureField;
 
     private int panelX;
     private int panelY;
@@ -56,7 +55,7 @@ public class SkyblockCounterConfigScreen extends Screen {
     private List<String> finderResults = List.of();
 
     public SkyblockCounterConfigScreen(Screen parent) {
-        super(Text.literal("SkyCounter Configuration"));
+        super(Component.literal("SkyCounter Configuration"));
         this.parent = parent;
     }
 
@@ -79,8 +78,9 @@ public class SkyblockCounterConfigScreen extends Screen {
         rebuildWidgets();
     }
 
-    private void rebuildWidgets() {
-        clearChildren();
+    @Override
+    protected void rebuildWidgets() {
+        clearWidgets();
 
         switch (selectedCategory) {
             case HUD -> addHudWidgets();
@@ -96,16 +96,16 @@ public class SkyblockCounterConfigScreen extends Screen {
     private void addHudWidgets() {
         int y = contentAreaTop + 36 - scrollOffset;
         hudXField = createTextField(contentX + 17, y + 65, 80, "X");
-        hudXField.setText(String.valueOf(SkyblockCounterService.getHudX()));
-        hudXField.setChangedListener(s -> {
+        hudXField.setValue(String.valueOf(SkyblockCounterService.getHudX()));
+        hudXField.setResponder(s -> {
         });
-        addDrawableChild(hudXField);
+        addRenderableWidget(hudXField);
 
         hudYField = createTextField(contentX + 109, y + 65, 80, "Y");
-        hudYField.setText(String.valueOf(SkyblockCounterService.getHudY()));
-        addDrawableChild(hudYField);
+        hudYField.setValue(String.valueOf(SkyblockCounterService.getHudY()));
+        addRenderableWidget(hudYField);
 
-        addDrawableChild(new StyledButtonWidget(contentX + 194, y + 56, 70, 22, Text.literal("Apply"), button -> applyHudPosition()));
+        addRenderableWidget(new StyledButtonWidget(contentX + 194, y + 56, 70, 22, Component.literal("Apply"), button -> applyHudPosition()));
     }
 
     private void addMobWidgets() {
@@ -113,67 +113,67 @@ public class SkyblockCounterConfigScreen extends Screen {
         mobIdField = createTextField(contentX + 7, formY, contentWidth - 16, "Mob ID");
         mobNameField = createTextField(contentX + 7, formY + 28, contentWidth - 16, "Display name");
         mobTextureField = createTextField(contentX + 7, formY + 56, contentWidth - 16, "Texture path (optional)");
-        addDrawableChild(mobIdField);
-        addDrawableChild(mobNameField);
-        addDrawableChild(mobTextureField);
-        addDrawableChild(new StyledButtonWidget(contentX, formY + 84, 80, 22, Text.literal("Add Mob"), button -> addMobFromForm()));
+        addRenderableWidget(mobIdField);
+        addRenderableWidget(mobNameField);
+        addRenderableWidget(mobTextureField);
+        addRenderableWidget(new StyledButtonWidget(contentX, formY + 84, 80, 22, Component.literal("Add Mob"), button -> addMobFromForm()));
     }
 
     private void addApiWidgets() {
         int y = contentAreaTop + 36 - scrollOffset;
         apiKeyField = createTextField(contentX + 17, y + 52, contentWidth - 90, "API Key");
         apiKeyField.setMaxLength(128);
-        apiKeyField.setText(SkyblockCounterService.getConfig().getAPI_KEY() != null ? "*".repeat(SkyblockCounterService.getConfig().getAPI_KEY().length()) : "");
-        addDrawableChild(apiKeyField);
-        addDrawableChild(new StyledButtonWidget(contentX + contentWidth - 78, y + 45, 70, 22, Text.literal("Save"), button -> saveApiKey()));
+        apiKeyField.setValue(SkyblockCounterService.getConfig().getAPI_KEY() != null ? "*".repeat(SkyblockCounterService.getConfig().getAPI_KEY().length()) : "");
+        addRenderableWidget(apiKeyField);
+        addRenderableWidget(new StyledButtonWidget(contentX + contentWidth - 78, y + 45, 70, 22, Component.literal("Save"), button -> saveApiKey()));
 
         uuidField = createTextField(contentX + 17, y + 134, contentWidth - 90, "UUID");
         uuidField.setMaxLength(64);
-        uuidField.setText(SkyblockCounterService.getConfig().getundashedUuid());
-        addDrawableChild(uuidField);
-        addDrawableChild(new StyledButtonWidget(contentX + contentWidth - 78, y + 126, 70, 22, Text.literal("Save"), button -> saveUuid()));
+        uuidField.setValue(SkyblockCounterService.getConfig().getundashedUuid());
+        addRenderableWidget(uuidField);
+        addRenderableWidget(new StyledButtonWidget(contentX + contentWidth - 78, y + 126, 70, 22, Component.literal("Save"), button -> saveUuid()));
     }
 
     private void addToolsWidgets() {
         int y = contentAreaTop + 36 - scrollOffset + 36;
-        addDrawableChild(new StyledButtonWidget(contentX, y, 220, 24, Text.literal("Scan for Corleone Structures"), button -> runCorleoneFinder()));
+        addRenderableWidget(new StyledButtonWidget(contentX, y, 220, 24, Component.literal("Scan for Corleone Structures"), button -> runCorleoneFinder()));
     }
 
     private void addSessionWidgets() {
         int y = contentAreaTop + 36 - scrollOffset + 218;
-        addDrawableChild(new StyledButtonWidget(contentX, y, 36, 22, Text.literal("-5"), button -> adjustSession(-5)));
-        addDrawableChild(new StyledButtonWidget(contentX + 42, y, 36, 22, Text.literal("-1"), button -> adjustSession(-1)));
-        addDrawableChild(new StyledButtonWidget(contentX + 84, y, 36, 22, Text.literal("+1"), button -> adjustSession(1)));
-        addDrawableChild(new StyledButtonWidget(contentX + 126, y, 36, 22, Text.literal("+5"), button -> adjustSession(5)));
-        addDrawableChild(new StyledButtonWidget(contentX + contentWidth - 90, y, 90, 32, Text.literal("Reset"), button -> resetSession()));
+        addRenderableWidget(new StyledButtonWidget(contentX, y, 36, 22, Component.literal("-5"), button -> adjustSession(-5)));
+        addRenderableWidget(new StyledButtonWidget(contentX + 42, y, 36, 22, Component.literal("-1"), button -> adjustSession(-1)));
+        addRenderableWidget(new StyledButtonWidget(contentX + 84, y, 36, 22, Component.literal("+1"), button -> adjustSession(1)));
+        addRenderableWidget(new StyledButtonWidget(contentX + 126, y, 36, 22, Component.literal("+5"), button -> adjustSession(5)));
+        addRenderableWidget(new StyledButtonWidget(contentX + contentWidth - 90, y, 90, 32, Component.literal("Reset"), button -> resetSession()));
     }
 
-    private TextFieldWidget createTextField(int x, int y, int width, String placeholder) {
-        TextFieldWidget field = new TextFieldWidget(textRenderer, x, y, width, 20, Text.literal(placeholder));
-        field.setPlaceholder(Text.literal(placeholder));
-        field.setDrawsBackground(false);
+    private EditBox createTextField(int x, int y, int width, String placeholder) {
+        EditBox field = new EditBox(this.font, x, y, width, 20, Component.literal(placeholder));
+        field.setHint(Component.literal(placeholder));
+        field.setBordered(false);
         return field;
     }
 
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        context.fill(0, 0, width, height, ConfigPanelHelper.BACKDROP);
-        drawPanel(context);
-        drawHeader(context);
-        drawCategories(context, mouseX, mouseY);
+    public void extractRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float delta) {
+        guiGraphics.fill(0, 0, width, height, ConfigPanelHelper.BACKDROP);
+        drawPanel(guiGraphics);
+        drawHeader(guiGraphics);
+        drawCategories(guiGraphics, mouseX, mouseY);
 
-        context.enableScissor(contentX - 4, contentAreaTop - 4, contentX + contentWidth + 4, contentAreaBottom);
-        drawContent(context, mouseX, mouseY, delta);
+        guiGraphics.enableScissor(contentX - 4, contentAreaTop - 4, contentX + contentWidth + 4, contentAreaBottom);
+        drawContent(guiGraphics, mouseX, mouseY, delta);
 
-        super.render(context, mouseX, mouseY, delta);
+        super.extractRenderState(guiGraphics, mouseX, mouseY, delta);
 
-        context.disableScissor();
+        guiGraphics.disableScissor();
 
-        renderStatus(context);
-        context.drawTextWithShadow(textRenderer, "ESC to close", panelX + panelWidth - 94, panelY + panelHeight - 16, ConfigPanelHelper.TEXT_SECONDARY);
+        renderStatus(guiGraphics);
+        guiGraphics.textWithBackdrop(this.font, Component.literal("ESC to close"), panelX + panelWidth - 94, panelY + panelHeight - 16, 999, ConfigPanelHelper.TEXT_SECONDARY);
     }
 
-    private void drawPanel(DrawContext context) {
+    private void drawPanel(GuiGraphicsExtractor context) {
         ConfigPanelHelper.drawRoundedRect(context, panelX + 3, panelY + 4, panelWidth, panelHeight, ConfigPanelHelper.PANEL_SHADOW);
         ConfigPanelHelper.drawRoundedRect(context, panelX, panelY, panelWidth, panelHeight, ConfigPanelHelper.PANEL_BORDER);
         ConfigPanelHelper.drawRoundedRect(context, panelX + 1, panelY + 1, panelWidth - 2, panelHeight - 2, ConfigPanelHelper.PANEL);
@@ -181,16 +181,16 @@ public class SkyblockCounterConfigScreen extends Screen {
         context.fill(panelX + sidebarWidth, panelY + 44, panelX + sidebarWidth + 1, panelY + panelHeight - 1, ConfigPanelHelper.PANEL_BORDER);
     }
 
-    private void drawHeader(DrawContext context) {
+    private void drawHeader(GuiGraphicsExtractor context) {
         context.fill(panelX + 1, panelY + 42, panelX + panelWidth - 1, panelY + 43, ConfigPanelHelper.PANEL_BORDER);
-        context.drawTextWithShadow(textRenderer, "Sky", panelX + 17, panelY + 16, ConfigPanelHelper.TEXT_PRIMARY);
-        int skyWidth = textRenderer.getWidth("Sky");
-        context.drawTextWithShadow(textRenderer, "Counter", panelX + 17 + skyWidth, panelY + 16, ConfigPanelHelper.ACCENT);
-        context.drawTextWithShadow(textRenderer, "CONFIGURATION", panelX + panelWidth - 99, panelY + 17, ConfigPanelHelper.TEXT_SECONDARY);
+        context.textWithBackdrop(this.font, Component.literal("Sky"), panelX + 17, panelY + 16, 50, ConfigPanelHelper.TEXT_PRIMARY);
+        int skyWidth = this.font.width("Sky");
+        context.textWithBackdrop(this.font, Component.literal("Counter"), panelX + 17 + skyWidth, panelY + 16, 80, ConfigPanelHelper.ACCENT);
+        context.textWithBackdrop(this.font, Component.literal("CONFIGURATION"), panelX + panelWidth - 99, panelY + 17, 120, ConfigPanelHelper.TEXT_SECONDARY);
     }
 
-    private void drawCategories(DrawContext context, int mouseX, int mouseY) {
-        context.drawTextWithShadow(textRenderer, "CATEGORIES", panelX + 14, panelY + 57, ConfigPanelHelper.TEXT_SECONDARY);
+    private void drawCategories(GuiGraphicsExtractor context, int mouseX, int mouseY) {
+        context.textWithBackdrop(this.font, Component.literal("CATEGORIES"), panelX + 14, panelY + 57, sidebarWidth, ConfigPanelHelper.TEXT_SECONDARY);
         int y = panelY + 75;
         for (Category category : Category.values()) {
             boolean selected = selectedCategory == category;
@@ -201,15 +201,15 @@ public class SkyblockCounterConfigScreen extends Screen {
                     context.fill(panelX + 7, y + 4, panelX + 9, y + 19, ConfigPanelHelper.ACCENT);
                 }
             }
-            context.drawTextWithShadow(textRenderer, category.label, panelX + 16, y + 8, selected ? ConfigPanelHelper.TEXT_PRIMARY : ConfigPanelHelper.TEXT_SECONDARY);
+            context.textWithBackdrop(this.font, Component.literal(category.label), panelX + 16, y + 8, sidebarWidth - 20, selected ? ConfigPanelHelper.TEXT_PRIMARY : ConfigPanelHelper.TEXT_SECONDARY);
             y += 27;
         }
     }
 
-    private void drawContent(DrawContext context, int mouseX, int mouseY, float delta) {
+    private void drawContent(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         int rowY = panelY + CONTENT_TOP - scrollOffset;
-        context.drawTextWithShadow(textRenderer, selectedCategory.title, contentX, rowY, ConfigPanelHelper.TEXT_PRIMARY);
-        context.drawTextWithShadow(textRenderer, selectedCategory.description, contentX, rowY + 15, ConfigPanelHelper.TEXT_SECONDARY);
+        context.textWithBackdrop(this.font, Component.literal(selectedCategory.title), contentX, rowY, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
+        context.textWithBackdrop(this.font, Component.literal(selectedCategory.description), contentX, rowY + 15, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
 
         switch (selectedCategory) {
             case GENERAL -> drawGeneralContent(context, mouseX, mouseY, delta, rowY + 36);
@@ -223,7 +223,7 @@ public class SkyblockCounterConfigScreen extends Screen {
         updateMaxScroll();
     }
 
-    private void drawGeneralContent(DrawContext context, int mouseX, int mouseY, float delta, int y) {
+    private void drawGeneralContent(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta, int y) {
         drawToggleOption(context, mouseX, mouseY, delta, contentX, y, contentWidth,
                 "Show HUD", "Shows or hides the SkyCounter in-game.",
                 SkyblockCounterService.isGuiVisible(), hudToggle);
@@ -232,27 +232,27 @@ public class SkyblockCounterConfigScreen extends Screen {
                 SkyblockCounterService.isShowCorleonitePercentage(), percentageToggle);
     }
 
-    private void drawHudContent(DrawContext context, int mouseX, int mouseY, float delta, int y) {
+    private void drawHudContent(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta, int y) {
         ConfigPanelHelper.drawOptionCard(context, contentX, y, contentWidth, 88, ConfigPanelHelper.isInside(mouseX, mouseY, contentX, y, contentWidth, 88));
-        context.drawTextWithShadow(textRenderer, "HUD Position", contentX + 14, y + 13, ConfigPanelHelper.TEXT_PRIMARY);
-        context.drawTextWithShadow(textRenderer, "Current: X=" + SkyblockCounterService.getHudX() + ", Y=" + SkyblockCounterService.getHudY(),
-                contentX + 14, y + 30, ConfigPanelHelper.TEXT_SECONDARY);
-        context.drawTextWithShadow(textRenderer, "Enter coordinates and click Apply.", contentX + 14, y + 44, ConfigPanelHelper.TEXT_SECONDARY);
+        context.textWithBackdrop(this.font, Component.literal("HUD Position"), contentX + 14, y + 13, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
+        context.textWithBackdrop(this.font, Component.literal("Current: X=" + SkyblockCounterService.getHudX() + ", Y=" + SkyblockCounterService.getHudY()),
+                contentX + 14, y + 30, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
+        context.textWithBackdrop(this.font, Component.literal("Enter coordinates and click Apply."), contentX + 14, y + 44, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
 
         drawFieldBackground(context, contentX + 12, y + 58, 80, 20);
         drawFieldBackground(context, contentX + 104, y + 58, 80, 20);
     }
 
-    private void drawMobsContent(DrawContext context, int mouseX, int mouseY, float delta, int y) {
+    private void drawMobsContent(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta, int y) {
         int presetY = y;
-        context.drawTextWithShadow(textRenderer, "Quick Presets", contentX, presetY, ConfigPanelHelper.TEXT_PRIMARY);
+        context.textWithBackdrop(this.font, Component.literal("Quick Presets"), contentX, presetY, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
         int buttonWidth = (contentWidth - 16) / 3;
         drawPresetButton(context, mouseX, mouseY, contentX, presetY + 18, buttonWidth, 28, "Treasure Hoarder", "treasure_hoarder_70");
         drawPresetButton(context, mouseX, mouseY, contentX + buttonWidth + 8, presetY + 18, buttonWidth, 28, "Corleone", "team_treasurite_corleone_200");
         drawPresetButton(context, mouseX, mouseY, contentX + (buttonWidth + 8) * 2, presetY + 18, buttonWidth, 28, "Zealot", "zealot_enderman_55");
 
         int listY = presetY + 58;
-        context.drawTextWithShadow(textRenderer, "Mob List", contentX, listY, ConfigPanelHelper.TEXT_PRIMARY);
+        context.textWithBackdrop(this.font, Component.literal("Mob List"), contentX, listY, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
         List<SkyblockCounterConfig.MobEntry> mobs = SkyblockCounterActions.listMobs();
         int rowY = listY + 16;
         String currentMobId = SkyblockCounterService.getConfig().getLastMobId();
@@ -263,22 +263,22 @@ public class SkyblockCounterConfigScreen extends Screen {
             if (selected) {
                 context.fill(contentX, rowY + 4, contentX + 2, rowY + 20, ConfigPanelHelper.ACCENT);
             }
-            context.drawTextWithShadow(textRenderer, entry.name, contentX + 10, rowY + 8, ConfigPanelHelper.TEXT_PRIMARY);
-            context.drawTextWithShadow(textRenderer, entry.id, contentX + 10 + textRenderer.getWidth(entry.name) + 8, rowY + 8, ConfigPanelHelper.TEXT_SECONDARY);
+            context.textWithBackdrop(this.font, Component.literal(entry.name), contentX + 10, rowY + 8, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
+            context.textWithBackdrop(this.font, Component.literal(entry.id), contentX + 10 + this.font.width(entry.name) + 8, rowY + 8, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
             ConfigPanelHelper.drawButton(context, contentX + contentWidth - 52, rowY + 4, 44, 16,
                     ConfigPanelHelper.isInside(mouseX, mouseY, contentX + contentWidth - 52, rowY + 4, 44, 16), false);
-            context.drawCenteredTextWithShadow(textRenderer, "Remove", contentX + contentWidth - 30, rowY + 8, 0xFFFF8888);
+            context.textWithBackdrop(this.font, Component.literal("Remove"), contentX + contentWidth - 48 , rowY + 8, 44, 0xFFFF8888);
             rowY += 28;
         }
 
         int formY = rowY + 12;
-        context.drawTextWithShadow(textRenderer, "Add Mob", contentX, formY, ConfigPanelHelper.TEXT_PRIMARY);
+        context.textWithBackdrop(this.font, Component.literal("Add Mob"), contentX, formY, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
         drawFieldBackground(context, contentX, formY + 16, contentWidth - 16, 20);
         drawFieldBackground(context, contentX, formY + 44, contentWidth - 16, 20);
         drawFieldBackground(context, contentX, formY + 72, contentWidth - 16, 20);
     }
 
-    private void drawSessionContent(DrawContext context, int mouseX, int mouseY, float delta, int y) {
+    private void drawSessionContent(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta, int y) {
         drawToggleOption(context, mouseX, mouseY, delta, contentX, y, contentWidth,
                 "Session Mode", "Enables separate kill tracking for this session.",
                 SkyblockCounterService.isShowSessionKills(), sessionToggle);
@@ -291,89 +291,89 @@ public class SkyblockCounterConfigScreen extends Screen {
             drawStatRow(context, statsY + 102, "Corleonite Stats", SkyblockCounterActions.getCorleoniteStats().orElse("No data"));
         } else {
             ConfigPanelHelper.drawStatCard(context, contentX, statsY, contentWidth, 48);
-            context.drawCenteredTextWithShadow(textRenderer, "Enable session mode to view stats", contentX + contentWidth / 2, statsY + 20, ConfigPanelHelper.TEXT_SECONDARY);
+            context.textWithBackdrop(this.font, Component.literal("Enable session mode to view stats"), contentX + 7, statsY + 20, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
         }
     }
 
-    private void drawApiContent(DrawContext context, int mouseX, int mouseY, int y) {
+    private void drawApiContent(GuiGraphicsExtractor context, int mouseX, int mouseY, int y) {
         ConfigPanelHelper.drawOptionCard(context, contentX, y, contentWidth, 72, false);
-        context.drawTextWithShadow(textRenderer, "Hypixel API Key", contentX + 14, y + 13, ConfigPanelHelper.TEXT_PRIMARY);
-        context.drawTextWithShadow(textRenderer, "Required for bestiary kill counts from the API.", contentX + 14, y + 30, ConfigPanelHelper.TEXT_SECONDARY);
+        context.textWithBackdrop(this.font, Component.literal("Hypixel API Key"), contentX + 14, y + 13, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
+        context.textWithBackdrop(this.font, Component.literal("Required for bestiary kill counts from the API."), contentX + 14, y + 30, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
         drawFieldBackground(context, contentX + 12, y + 46, contentWidth - 100, 20);
 
         ConfigPanelHelper.drawOptionCard(context, contentX, y + 82, contentWidth, 72, false);
-        context.drawTextWithShadow(textRenderer, "Player UUID", contentX + 14, y + 95, ConfigPanelHelper.TEXT_PRIMARY);
-        context.drawTextWithShadow(textRenderer, "Your Minecraft UUID.", contentX + 14, y + 112, ConfigPanelHelper.TEXT_SECONDARY);
+        context.textWithBackdrop(this.font, Component.literal("Player UUID"), contentX + 14, y + 95, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
+        context.textWithBackdrop(this.font, Component.literal("Your Minecraft UUID."), contentX + 14, y + 112, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
         drawFieldBackground(context, contentX + 12, y + 128, contentWidth - 100, 20);
     }
 
-    private void drawToolsContent(DrawContext context, int mouseX, int mouseY, int y) {
-        context.drawTextWithShadow(textRenderer, "Corleone Finder", contentX, y + 4, ConfigPanelHelper.TEXT_PRIMARY);
-        context.drawTextWithShadow(textRenderer, "Scans loaded chunks for Corleone boss structures and saves waypoints.", contentX, y + 18, ConfigPanelHelper.TEXT_SECONDARY);
+    private void drawToolsContent(GuiGraphicsExtractor context, int mouseX, int mouseY, int y) {
+        context.textWithBackdrop(this.font, Component.literal("Corleone Finder"), contentX, y + 4, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
+        context.textWithBackdrop(this.font, Component.literal("Scans loaded chunks for Corleone boss structures and saves waypoints."), contentX, y + 18, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
 
         int resultY = y + 68;
         List<WaypointManager.Waypoint> waypoints = WaypointManager.getWaypoints();
 
         if (waypoints.isEmpty()) {
-            context.drawTextWithShadow(textRenderer, "No saved waypoints yet.", contentX, resultY, ConfigPanelHelper.TEXT_SECONDARY);
+            context.textWithBackdrop(this.font, Component.literal("No saved waypoints yet."), contentX, resultY, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
         } else {
-            context.drawTextWithShadow(textRenderer, "Saved Waypoints:", contentX, resultY, ConfigPanelHelper.TEXT_PRIMARY);
+            context.textWithBackdrop(this.font, Component.literal("Saved Waypoints:"), contentX, resultY, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
             int rowY = resultY + 16;
             for (WaypointManager.Waypoint wp : waypoints) {
                 boolean hovered = ConfigPanelHelper.isInside(mouseX, mouseY, contentX, rowY, contentWidth, 24);
                 ConfigPanelHelper.drawOptionCard(context, contentX, rowY, contentWidth, 24, hovered);
 
-                context.drawTextWithShadow(textRenderer, wp.label(), contentX + 10, rowY + 8, ConfigPanelHelper.TEXT_PRIMARY);
+                context.textWithBackdrop(this.font, Component.literal(wp.label()), contentX + 10, rowY + 8, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
                 String coords = "X: " + wp.pos().getX() + ", Y: " + wp.pos().getY() + ", Z: " + wp.pos().getZ();
-                context.drawTextWithShadow(textRenderer, coords, contentX + 15 + textRenderer.getWidth(wp.label()), rowY + 8, ConfigPanelHelper.TEXT_SECONDARY);
+                context.textWithBackdrop(this.font, Component.literal(coords), contentX + 15 + this.font.width(wp.label()), rowY + 8, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
 
                 ConfigPanelHelper.drawButton(context, contentX + contentWidth - 52, rowY + 4, 44, 16,
                         ConfigPanelHelper.isInside(mouseX, mouseY, contentX + contentWidth - 52, rowY + 4, 44, 16), false);
-                context.drawCenteredTextWithShadow(textRenderer, "Remove", contentX + contentWidth - 30, rowY + 8, 0xFFFF8888);
+                context.textWithBackdrop(this.font, Component.literal("Remove"), contentX + contentWidth - 48, rowY + 8, 44, 0xFFFF8888);
 
                 rowY += 28;
             }
         }
     }
 
-    private void drawStatRow(DrawContext context, int y, String label, String value) {
+    private void drawStatRow(GuiGraphicsExtractor context, int y, String label, String value) {
         int half = (contentWidth - 8) / 2;
         ConfigPanelHelper.drawStatCard(context, contentX, y, half, 28);
         ConfigPanelHelper.drawStatCard(context, contentX + half + 8, y, half, 28);
-        context.drawTextWithShadow(textRenderer, label, contentX + 10, y + 10, ConfigPanelHelper.TEXT_SECONDARY);
-        context.drawTextWithShadow(textRenderer, value, contentX + half + 18, y + 10, ConfigPanelHelper.TEXT_PRIMARY);
+        context.textWithBackdrop(this.font, Component.literal(label), contentX + 10, y + 10, half, ConfigPanelHelper.TEXT_SECONDARY);
+        context.textWithBackdrop(this.font, Component.literal(value), contentX + half + 18, y + 10, half, ConfigPanelHelper.TEXT_PRIMARY);
     }
 
-    private void drawPresetButton(DrawContext context, int mouseX, int mouseY, int x, int y, int width, int height, String label, String mobId) {
+    private void drawPresetButton(GuiGraphicsExtractor context, int mouseX, int mouseY, int x, int y, int width, int height, String label, String mobId) {
         boolean active = mobId.equals(SkyblockCounterService.getConfig().getLastMobId());
         boolean hovered = ConfigPanelHelper.isInside(mouseX, mouseY, x, y, width, height);
         ConfigPanelHelper.drawButton(context, x, y, width, height, hovered, active);
-        context.drawCenteredTextWithShadow(textRenderer, label, x + width / 2, y + height / 2 - 4, ConfigPanelHelper.TEXT_PRIMARY);
+        context.textWithBackdrop(this.font, Component.literal(label), x + 7, y + height / 2 - 4, width, ConfigPanelHelper.TEXT_PRIMARY);
     }
 
-    private void drawToggleOption(DrawContext context, int mouseX, int mouseY, float delta, int x, int y, int optionWidth,
+    private void drawToggleOption(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta, int x, int y, int optionWidth,
                                   String title, String description, boolean enabled, ToggleSwitch toggle) {
         boolean rowHovered = ConfigPanelHelper.isInside(mouseX, mouseY, x, y, optionWidth, OPTION_HEIGHT);
         ConfigPanelHelper.drawOptionCard(context, x, y, optionWidth, OPTION_HEIGHT, rowHovered);
 
-        context.drawTextWithShadow(textRenderer, title, x + 14, y + 13, ConfigPanelHelper.TEXT_PRIMARY);
-        context.drawTextWithShadow(textRenderer, description, x + 14, y + 30, ConfigPanelHelper.TEXT_SECONDARY);
+        context.textWithBackdrop(this.font, Component.literal(title), x + 14, y + 13, optionWidth, ConfigPanelHelper.TEXT_PRIMARY);
+        context.textWithBackdrop(this.font, Component.literal(description), x + 14, y + 30, optionWidth, ConfigPanelHelper.TEXT_SECONDARY);
 
         int toggleX = x + optionWidth - ToggleSwitch.WIDTH - 14;
         int toggleY = y + 20;
         toggle.render(context, toggleX, toggleY, enabled, ToggleSwitch.isHovered(mouseX, mouseY, toggleX, toggleY), delta);
     }
 
-    private void drawFieldBackground(DrawContext context, int x, int y, int width, int height) {
+    private void drawFieldBackground(GuiGraphicsExtractor context, int x, int y, int width, int height) {
         ConfigPanelHelper.drawRoundedRect(context, x, y, width, height, ConfigPanelHelper.FIELD_BG);
         ConfigPanelHelper.drawRoundedRect(context, x + 1, y + 1, width - 2, height - 2, ConfigPanelHelper.CARD_INNER);
     }
 
-    private void renderStatus(DrawContext context) {
+    private void renderStatus(GuiGraphicsExtractor context) {
         if (statusMessage.isEmpty() || System.currentTimeMillis() > statusExpiry) {
             return;
         }
-        context.drawTextWithShadow(textRenderer, statusMessage, panelX + 16, panelY + panelHeight - 16, ConfigPanelHelper.ACCENT);
+        context.textWithBackdrop(this.font, Component.literal(statusMessage), panelX + 16, panelY + panelHeight - 16, 300, ConfigPanelHelper.ACCENT);
     }
 
     private int getMobListHeight() {
@@ -395,12 +395,13 @@ public class SkyblockCounterConfigScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(Click click, boolean doubled) {
+    public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent click, boolean doubleClick) {
+        if (click.button() != 0) {
+            return super.mouseClicked(click, doubleClick);
+        }
+
         double mouseX = click.x();
         double mouseY = click.y();
-        if (click.button() != 0) {
-            return super.mouseClicked(click, doubled);
-        }
 
         if (handleCategoryClick(mouseX, mouseY)) {
             return true;
@@ -426,7 +427,7 @@ public class SkyblockCounterConfigScreen extends Screen {
             }
         }
 
-        return super.mouseClicked(click, doubled);
+        return super.mouseClicked(click, doubleClick);
     }
 
     private boolean handleCategoryClick(double mouseX, double mouseY) {
@@ -544,9 +545,9 @@ public class SkyblockCounterConfigScreen extends Screen {
 
     private void applyHudPosition() {
         try {
-            int x = Integer.parseInt(hudXField.getText().trim());
-            int y = Integer.parseInt(hudYField.getText().trim());
-            LOGGER.info(x +" " + y);
+            int x = Integer.parseInt(hudXField.getValue().trim());
+            int y = Integer.parseInt(hudYField.getValue().trim());
+            LOGGER.info(x + " " + y);
             SkyblockCounterActions.setHudPosition(x, y);
             setStatus("HUD position set to X: " + x + ", Y: " + y);
             sendChat("HUD position set to X: " + x + ", Y: " + y);
@@ -556,50 +557,48 @@ public class SkyblockCounterConfigScreen extends Screen {
     }
 
     private void addMobFromForm() {
-        String id = mobIdField.getText().trim();
-        String name = mobNameField.getText().trim();
-        String texture = mobTextureField.getText().trim();
+        String id = mobIdField.getValue().trim();
+        String name = mobNameField.getValue().trim();
+        String texture = mobTextureField.getValue().trim();
         if (id.isEmpty() || name.isEmpty()) {
             setStatus("Mob ID and name are required");
             return;
         }
         SkyblockCounterActions.MobAddResult result = SkyblockCounterActions.addMob(id, name, texture);
         setStatus(result.message());
-        mobIdField.setText("");
-        mobNameField.setText("");
-        mobTextureField.setText("");
+        mobIdField.setValue("");
+        mobNameField.setValue("");
+        mobTextureField.setValue("");
         rebuildWidgets();
     }
 
     private void saveApiKey() {
-        SkyblockCounterActions.setApiKey(apiKeyField.getText().trim());
+        SkyblockCounterActions.setApiKey(apiKeyField.getValue().trim());
         setStatus("API key saved");
         sendChat("API key was set");
     }
 
     private void saveUuid() {
-        SkyblockCounterActions.setUuid(uuidField.getText().trim());
+        SkyblockCounterActions.setUuid(uuidField.getValue().trim());
         setStatus("UUID saved");
         sendChat("UUID was set");
     }
 
     public void runCorleoneFinder() {
-        if (client == null || client.world == null || client.player == null) {
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+
+        if (mc.level == null || mc.player == null) {
             finderResults = List.of("Must be in a world");
             setStatus("Must be in a world");
+            System.out.println("CorleoneFinder aborted: level or player is null!");
             return;
         }
-        SkyblockCounterActions.CorleoneFinderResult result = SkyblockCounterActions.findCorleoneStructures(client.world, client.player.getBlockPos());
+
+        System.out.println("Triggering CorleoneFinder from GUI...");
+        SkyblockCounterActions.CorleoneFinderResult result = SkyblockCounterActions.findCorleoneStructures(mc.level, mc.player.blockPosition());
         finderResults = new ArrayList<>(result.messages());
 
         List<WaypointManager.Waypoint> currentWaypoints = new ArrayList<>(WaypointManager.getWaypoints());
-        int count = currentWaypoints.size() + 1;
-        for (String msg : result.messages()) {
-            if (msg.contains("at:")) {
-                try {
-                } catch (Exception ignored) {}
-            }
-        }
         WaypointManager.setWaypoints(currentWaypoints);
 
         setStatus(result.messages().isEmpty() ? "No structures found" : result.messages().get(0));
@@ -633,14 +632,14 @@ public class SkyblockCounterConfigScreen extends Screen {
     }
 
     @Override
-    public void close() {
-        if (client != null) {
-            client.setScreen(parent);
+    public void onClose() {
+        if (this.minecraft != null) {
+            this.minecraft.setScreen(parent);
         }
     }
 
     @Override
-    public boolean shouldPause() {
+    public boolean isPauseScreen() {
         return false;
     }
 
@@ -650,7 +649,7 @@ public class SkyblockCounterConfigScreen extends Screen {
         MOBS("Mobs", "Mob Tracking", "Switch targets and manage custom mobs."),
         API("API", "API Settings", "Configure Hypixel API access."),
         SESSION("Session", "Session Tracking", "Track kills and view statistics for your current session."),
-        TOOLS("Tools", "Tools", "Utility features for Skyblock farming and Corleone waypoints.");
+        TOOLS("Tools", "Tools", "Utility features for Skyblock farming.");
 
         private final String label;
         private final String title;

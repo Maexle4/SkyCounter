@@ -3,10 +3,10 @@ package de.maexle.skyblockcounter.gui;
 import de.maexle.skyblockcounter.SkyblockCounterConfig;
 import de.maexle.skyblockcounter.SkyblockCounterService;
 import de.maexle.skyblockcounter.waypoint.WaypointManager;
-import net.minecraft.block.Blocks;
-import net.minecraft.client.world.ClientWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -169,7 +169,8 @@ public final class SkyblockCounterActions {
         return Optional.of(String.format("Corleonite: %d | Drop: %.2f%%", corleoniteCount, percentage));
     }
 
-    public static CorleoneFinderResult findCorleoneStructures(ClientWorld world, BlockPos playerPos) {
+    public static CorleoneFinderResult findCorleoneStructures(ClientLevel world, BlockPos playerPos) {
+        System.out.println("Finding Corleone structures");
         if (world == null || playerPos == null) {
             return CorleoneFinderResult.notInWorld();
         }
@@ -186,37 +187,37 @@ public final class SkyblockCounterActions {
                 int chunkX = centerChunkX + xOffset;
                 int chunkZ = centerChunkZ + zOffset;
 
-                WorldChunk chunk = world.getChunk(chunkX, chunkZ);
+                LevelChunk chunk = world.getChunk(chunkX, chunkZ);
                 if (chunk == null) {
                     continue;
                 }
 
-                int startX = chunk.getPos().getStartX();
-                int startZ = chunk.getPos().getStartZ();
-                int bottomY = world.getBottomY();
-                int topY = world.getTopYInclusive();
+                int startX = chunk.getPos().getMinBlockX();
+                int startZ = chunk.getPos().getMinBlockZ();
+                int bottomY = world.getMinY();
+                int topY = world.getMaxY();
 
                 for (int x = 0; x < 16; x++) {
                     for (int z = 0; z < 16; z++) {
                         for (int y = bottomY + 3; y < topY - 2; y++) {
                             BlockPos basePos = new BlockPos(startX + x, y, startZ + z);
 
-                            if (chunk.getBlockState(basePos).isOf(Blocks.POLISHED_ANDESITE)
-                                    && chunk.getBlockState(basePos.up()).isOf(Blocks.STONE_BRICK_STAIRS)
-                                    && chunk.getBlockState(basePos.up(2)).isOf(Blocks.SMOOTH_STONE_SLAB)) {
+                            if (chunk.getBlockState(basePos).is(Blocks.POLISHED_ANDESITE)
+                                    && chunk.getBlockState(basePos.above()).is(Blocks.STONE_BRICK_STAIRS)
+                                    && chunk.getBlockState(basePos.above(2)).is(Blocks.SMOOTH_STONE_SLAB)) {
                                 andesitePositions.add(basePos);
                             }
 
-                            if (chunk.getBlockState(basePos).isOf(Blocks.POLISHED_GRANITE)
-                                    && world.getBlockState(basePos.down(1)).isOf(Blocks.POLISHED_GRANITE)
-                                    && world.getBlockState(basePos.down(2)).isOf(Blocks.POLISHED_GRANITE)
-                                    && world.getBlockState(basePos.down(3)).isOf(Blocks.POLISHED_GRANITE)) {
+                            if (chunk.getBlockState(basePos).is(Blocks.POLISHED_GRANITE)
+                                    && world.getBlockState(basePos.below(1)).is(Blocks.POLISHED_GRANITE)
+                                    && world.getBlockState(basePos.below(2)).is(Blocks.POLISHED_GRANITE)
+                                    && world.getBlockState(basePos.below(3)).is(Blocks.POLISHED_GRANITE)) {
                                 BlockPos[] step1Dirs = {basePos.north(), basePos.south(), basePos.east(), basePos.west()};
                                 BlockPos[] step2Dirs = {basePos.north(2), basePos.south(2), basePos.east(2), basePos.west(2)};
 
                                 for (int i = 0; i < 4; i++) {
-                                    if (world.getBlockState(step1Dirs[i].up()).isOf(Blocks.LIGHT_GRAY_TERRACOTTA)
-                                            && world.getBlockState(step2Dirs[i].up(2)).isOf(Blocks.STONE_BRICKS)) {
+                                    if (world.getBlockState(step1Dirs[i].above()).is(Blocks.LIGHT_GRAY_TERRACOTTA)
+                                            && world.getBlockState(step2Dirs[i].above(2)).is(Blocks.STONE_BRICKS)) {
                                         granitePositions.add(basePos);
                                         break;
                                     }

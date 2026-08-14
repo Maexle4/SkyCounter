@@ -1,6 +1,6 @@
 package de.maexle.skyblockcounter.gui;
 
-import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.*;
 
 public final class ConfigPanelHelper {
     public static final int BACKDROP = 0xB8000000;
@@ -23,7 +23,7 @@ public final class ConfigPanelHelper {
     private ConfigPanelHelper() {
     }
 
-    public static void drawRoundedRect(DrawContext context, int x, int y, int width, int height, int color) {
+    public static void drawRoundedRect(GuiGraphicsExtractor context, int x, int y, int width, int height, int color) {
         context.fill(x + 2, y, x + width - 2, y + 1, color);
         context.fill(x + 1, y + 1, x + width - 1, y + 2, color);
         context.fill(x, y + 2, x + width, y + height - 2, color);
@@ -31,17 +31,17 @@ public final class ConfigPanelHelper {
         context.fill(x + 2, y + height - 1, x + width - 2, y + height, color);
     }
 
-    public static void drawOptionCard(DrawContext context, int x, int y, int width, int height, boolean hovered) {
+    public static void drawOptionCard(GuiGraphicsExtractor context, int x, int y, int width, int height, boolean hovered) {
         drawRoundedRect(context, x, y, width, height, hovered ? CARD_BG_HOVER : CARD_BG);
         drawRoundedRect(context, x + 1, y + 1, width - 2, height - 2, CARD_INNER);
     }
 
-    public static void drawStatCard(DrawContext context, int x, int y, int width, int height) {
+    public static void drawStatCard(GuiGraphicsExtractor context, int x, int y, int width, int height) {
         drawRoundedRect(context, x, y, width, height, 0xFF2E2C3A);
         drawRoundedRect(context, x + 1, y + 1, width - 2, height - 2, 0xFF23222C);
     }
 
-    public static void drawButton(DrawContext context, int x, int y, int width, int height, boolean hovered, boolean active) {
+    public static void drawButton(GuiGraphicsExtractor context, int x, int y, int width, int height, boolean hovered, boolean active) {
         int color = active ? BUTTON_BG_ACTIVE : (hovered ? BUTTON_BG_HOVER : BUTTON_BG);
         drawRoundedRect(context, x, y, width, height, color);
         if (active) {

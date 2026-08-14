@@ -9,15 +9,15 @@ import de.maexle.skyblockcounter.SkyblockCounterConfig;
 import de.maexle.skyblockcounter.SkyblockCounterService;
 import de.maexle.skyblockcounter.gui.ConfigPanelHelper;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
 import de.maexle.skyblockcounter.gui.SkyblockCounterConfigScreen;
-
+import net.minecraft.network.chat.*;
 import java.util.List;
 
-import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.argument;
-import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
+import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument;
+import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal;
 
 public class SkyblockCounterCommand {
 
@@ -90,7 +90,7 @@ public class SkyblockCounterCommand {
     }
 
     private static int showSkyCounterConfig(CommandContext<FabricClientCommandSource> context) {
-        MinecraftClient client = context.getSource().getClient();
+        Minecraft client = context.getSource().getClient();
         client.execute(() -> {
             client.setScreen(new SkyblockCounterConfigScreen(null));
         });
@@ -116,13 +116,13 @@ public class SkyblockCounterCommand {
     }
 
     private static int corleoneFinder(CommandContext<FabricClientCommandSource> context) {
-        var world = context.getSource().getWorld();
+        var world = context.getSource().getLevel();
         var player = context.getSource().getPlayer();
         if (world == null || player == null) {
             return 0;
         }
 
-        SkyblockCounterActions.CorleoneFinderResult result = SkyblockCounterActions.findCorleoneStructures(world, player.getBlockPos());
+        SkyblockCounterActions.CorleoneFinderResult result = SkyblockCounterActions.findCorleoneStructures(world, player.getOnPos());
         for (String message : result.messages()) {
             sendPrefixMessage(context.getSource(), message);
         }
@@ -242,10 +242,10 @@ public class SkyblockCounterCommand {
         */
         sendPrefixMessage(context.getSource(), "Fetching Corleonite stats...");
         SkyblockCounterService.getCorleoniteDropPercentageAPI()
-                .thenAccept(result -> MinecraftClient.getInstance().execute(() ->
+                .thenAccept(result -> Minecraft.getInstance().execute(() ->
                         sendPrefixMessage(context.getSource(), result)))
                 .exceptionally(ex -> {
-                    MinecraftClient.getInstance().execute(() ->
+                    Minecraft.getInstance().execute(() ->
                             sendPrefixMessage(context.getSource(), "Error: " + ex.getMessage()));
                     return null;
                 });
@@ -257,17 +257,17 @@ public class SkyblockCounterCommand {
     }
 
     public static void sendPlayerMessage(String message) {
-        net.minecraft.client.MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
+        net.minecraft.client.Minecraft client = net.minecraft.client.Minecraft.getInstance();
         if (client.player != null) {
-            client.player.sendMessage(formatPrefixMessage(message), false);
+            client.player.sendSystemMessage(formatPrefixMessage(message));
         }
     }
 
-    private static Text formatPrefixMessage(String message) {
-        return Text.literal("[").formatted(Formatting.GRAY)
-                .append(Text.literal("Sky").styled(style -> style.withColor(ConfigPanelHelper.TEXT_PRIMARY)))
-                .append(Text.literal("Counter").styled(style -> style.withColor(ConfigPanelHelper.ACCENT)))
-                .append(Text.literal("] ").formatted(Formatting.GRAY))
-                .append(Text.literal(message).formatted(Formatting.WHITE));
+    private static Component formatPrefixMessage(String message) {
+        return Component.literal("[").withStyle(ChatFormatting.GRAY)
+                .append(Component.literal("Sky").withStyle(style -> style.withColor(TextColor.fromRgb(ConfigPanelHelper.TEXT_PRIMARY & 0xFFFFFF))))
+                .append(Component.literal("Counter").withStyle(style -> style.withColor(TextColor.fromRgb(ConfigPanelHelper.ACCENT & 0xFFFFFF))))
+                .append(Component.literal("] ").withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(message).withStyle(ChatFormatting.WHITE));
     }
 }

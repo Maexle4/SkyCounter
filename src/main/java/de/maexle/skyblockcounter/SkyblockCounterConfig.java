@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import net.minecraft.client.Minecraft;
 
 import java.io.File;
 import java.io.FileReader;
@@ -11,6 +12,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 public class SkyblockCounterConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -59,9 +61,13 @@ public class SkyblockCounterConfig {
         if (!CONFIG_FILE.exists()) {
             return new SkyblockCounterConfig();
         }
-        
+
         try (FileReader reader = new FileReader(CONFIG_FILE)) {
             JsonObject json = GSON.fromJson(reader, JsonObject.class);
+
+            if (json == null) {
+                return new SkyblockCounterConfig();
+            }
             SkyblockCounterConfig config = new SkyblockCounterConfig();
             
             if (json.has("hudX")) config.hudX = json.get("hudX").getAsInt();
@@ -85,9 +91,9 @@ public class SkyblockCounterConfig {
             
             // Default mobs if list is empty
             if (config.mobEntries.isEmpty()) {
-                config.mobEntries.add(new MobEntry("treasure_hoarder_70", "Treasure Hoarder", "textures/gui/sprites/treasure_hoarder_head.png"));
-                config.mobEntries.add(new MobEntry("team_treasurite_corleone_200", "Corleone", "textures/gui/sprites/boss_corleone_head.png"));
-                config.mobEntries.add(new MobEntry("zealot_enderman_55", "Zealot", "textures/gui/sprites/zealot_enderman_head.png"));
+                config.mobEntries.add(new MobEntry("treasure_hoarder_70", "Treasure Hoarder", "treasure_hoarder_head"));
+                config.mobEntries.add(new MobEntry("team_treasurite_corleone_200", "Corleone", "boss_corleone_head"));
+                config.mobEntries.add(new MobEntry("zealot_enderman_55", "Zealot", "zealot_enderman_head"));
             }
 
             if (json.has("waypoints")) {
@@ -102,6 +108,13 @@ public class SkyblockCounterConfig {
                     config.waypoints.add(new WaypointEntry(name, x, y, z, color));
                 }
             }
+
+            if(config.undashedUuid.isEmpty() || config.undashedUuid.equals(" ")) {
+                Minecraft client = Minecraft.getInstance();
+                UUID uuid = client.getUser().getProfileId();
+                config.undashedUuid = uuid.toString().replace("-", "");
+            }
+
             return config;
         } catch (IOException e) {
             e.printStackTrace();
@@ -146,7 +159,13 @@ public class SkyblockCounterConfig {
                 waypointsArray.add(wpObj);
             }
             json.add("waypoints", waypointsArray);
-            
+
+            if(undashedUuid.isEmpty() || undashedUuid.equals(" ")) {
+                Minecraft client = Minecraft.getInstance();
+                UUID uuid = client.getUser().getProfileId();
+                undashedUuid = uuid.toString().replace("-", "");
+            }
+
             try (FileWriter writer = new FileWriter(CONFIG_FILE)) {
                 GSON.toJson(json, writer);
             }

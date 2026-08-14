@@ -1,7 +1,7 @@
 package de.maexle.skyblockcounter.gui;
 
-import net.minecraft.client.gui.DrawContext;
-
+import net.minecraft.client.gui.*;
+import net.minecraft.client.gui.Gui;
 
 public final class ToggleSwitch {
     public static final int WIDTH = 42;
@@ -13,7 +13,7 @@ public final class ToggleSwitch {
         thumbPosition = enabled ? 1.0F : 0.0F;
     }
 
-    public void render(DrawContext context, int x, int y, boolean enabled, boolean hovered, float tickDelta) {
+    public void render(GuiGraphicsExtractor context, int x, int y, boolean enabled, boolean hovered, float tickDelta) {
         float target = enabled ? 1.0F : 0.0F;
         thumbPosition += (target - thumbPosition) * Math.min(1.0F, 0.30F + tickDelta * 0.15F);
 
@@ -36,7 +36,7 @@ public final class ToggleSwitch {
         return mouseX >= x && mouseX < x + WIDTH && mouseY >= y && mouseY < y + HEIGHT;
     }
 
-    private static void drawRoundedRect(DrawContext context, int x, int y, int width, int height, int color) {
+    private static void drawRoundedRect(GuiGraphicsExtractor context, int x, int y, int width, int height, int color) {
         context.fill(x + 2, y, x + width - 2, y + 1, color);
         context.fill(x + 1, y + 1, x + width - 1, y + 2, color);
         context.fill(x, y + 2, x + width, y + height - 2, color);

@@ -1,12 +1,16 @@
 package de.maexle.skyblockcounter.waypoint;
 
 import de.maexle.skyblockcounter.gui.SkyblockCounterActions;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
 import java.util.ArrayList;
 import java.util.List;
 
 public class WaypointManager {
-    public record Waypoint(BlockPos pos, String label) {}
+    public record Waypoint(BlockPos pos, String label, int color) {
+        public Waypoint(BlockPos pos, String label) {
+            this(pos, label, 0xFF00FF00);
+        }
+    }
 
     private static final List<Waypoint> waypoints = new ArrayList<>();
 
@@ -14,7 +18,7 @@ public class WaypointManager {
         waypoints.clear();
         waypoints.addAll(newWaypoints);
         for (WaypointManager.Waypoint wp : newWaypoints){
-            SkyblockCounterActions.addWaypoint(wp.label, wp.pos().getX(), wp.pos().getY(), wp.pos().getZ(), 65280);
+            SkyblockCounterActions.addWaypoint(wp.label, wp.pos().getX(), wp.pos().getY(), wp.pos().getZ(), wp.color());
         }
 
     }
