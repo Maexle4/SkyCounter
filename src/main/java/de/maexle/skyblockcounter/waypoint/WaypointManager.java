@@ -27,6 +27,20 @@ public class WaypointManager {
         waypoints.clear();
     }
 
+    /**
+     * Drops every waypoint from memory and from the saved config. Used when the player
+     * changes world so coordinates from the previous island do not linger.
+     */
+    public static void clearAll() {
+        waypoints.clear();
+        de.maexle.skyblockcounter.SkyblockCounterConfig config =
+                de.maexle.skyblockcounter.SkyblockCounterService.getConfig();
+        if (!config.waypoints.isEmpty()) {
+            config.waypoints.clear();
+            config.save();
+        }
+    }
+
     public static List<Waypoint> getWaypoints() {
         return waypoints;
     }

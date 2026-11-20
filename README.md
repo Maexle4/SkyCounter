@@ -1,6 +1,6 @@
 # SkyCounter
 
-SkyCounter is a client-side Fabric mod for **Minecraft 26.1.2** (Hypixel Skyblock) that tracks mob kills via the Hypixel API and session data. Press `O` to open the config GUI, or `H` to toggle the HUD.
+SkyCounter is a client-side Fabric mod for **Minecraft 26.3** (Hypixel Skyblock) that tracks mob kills via the Hypixel API and session data. Press `O` to open the config GUI, or `H` to toggle the HUD.
 
 ---
 
@@ -10,7 +10,7 @@ SkyCounter is a client-side Fabric mod for **Minecraft 26.1.2** (Hypixel Skybloc
 * **Hypixel API Integration:** Automatically syncs kill records from your Bestiary data.
 * **Session & Drop Tracking:** Tracks session kills, Corleonite drops, percentages, and **Corleonite / Hour** statistics.
 * **Corleone Finder & Waypoints:** Scans chunks for Corleone structures, saves them as **waypoints**, and triggers sound alerts on spawn/defeat.
-* **Special Corleone Assistance:** Alerts you with a triple-anvil sound when a Corleone spawns and automatically starts a 2-minute timer with an XP orb reminder upon its defeat to track respawn windows.
+* **Special Corleone Assistance:** Alerts you with a triple-anvil sound when a Corleone spawns, and after its defeat starts an **on-screen respawn timer per structure**. Because Corleone "spawns every 60 or 120 seconds alternately", each structure's row shows both the 60s and 120s countdown side by side, with the window for the current cycle highlighted. A kill is attributed to the nearest scanned structure, so only that structure's timer restarts while the others keep counting.
 * **Custom Mobs & Controls:** Easily add, remove, or switch tracked mobs and adjust HUD positions.
 
 ---
@@ -20,8 +20,15 @@ SkyCounter is a client-side Fabric mod for **Minecraft 26.1.2** (Hypixel Skybloc
 * **You need to add your own API Key and UUID in the config gui for the bestiary tracking.**
 * `O` - Opens the config GUI
 * `H` - Toggle the HUD.
+* `F7` - Opens the **in-game HUD editor** (drag the HUD over the live game view).
+* `F9` - Toggle **debug mode** (shows the HUD in any world, including singleplayer).
+
+HUD positions are set in-game, not in the config panel: press `F7` (or `Edit HUD in Game` on the `HUD` tab) to open the editor overlay. The game world stays visible, both elements are drawn at their real positions with a selection outline, and you drag them wherever you want. Positions save as you drag.
 
 * `/skycounter` — Opens the config gui.
+* `/skycounter hud` — Opens the in-game HUD editor overlay directly.
+* `/skycounter debug` — Toggles debug mode, which renders the HUD outside Skyblock so it can be tested in a singleplayer world.
+* `/skycounter timer` — Toggles the on-screen respawn timer (`on` / `off` / `start` / `stop` / `status`). Each scanned structure gets its own countdown.
 * `/skycounter corleone_finder` — Automatically finds all Corleone structures in the loaded chunks.
 * `/skycounter set_api <API_KEY>` — Sets your Hypixel API key.
 * `/skycounter set_uuid <UUID>` — Sets your un-dashed player UUID.
