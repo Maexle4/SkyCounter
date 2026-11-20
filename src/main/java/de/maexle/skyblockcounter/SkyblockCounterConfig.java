@@ -22,6 +22,17 @@ public class SkyblockCounterConfig {
     private int hudY = 10;
     private boolean hudVisible = false;
     private boolean showCorleonitePercentage = false;
+    private boolean showRespawnTimer = true;
+    private boolean debugMode = false;
+    private boolean timerSoundEnabled = false;
+    private String language = "en_us";
+    private String countingMode = "api";
+    /** Persisted kill/corleonite counters, only used by the LOCAL_PERSISTENT mode. */
+    private int storedKills = 0;
+    private int storedCorleonite = 0;
+    private boolean clearWaypointsOnWorldChange = false;
+    private int timerX = 10;
+    private int timerY = 40;
     private String lastMobId = "zealot_enderman_55";
     private String lastMobName = "Zealot";
     public List<MobEntry> mobEntries = new ArrayList<>();
@@ -74,6 +85,16 @@ public class SkyblockCounterConfig {
             if (json.has("hudY")) config.hudY = json.get("hudY").getAsInt();
             if (json.has("hudVisible")) config.hudVisible = json.get("hudVisible").getAsBoolean();
             if (json.has("showCorleonitePercentage")) config.showCorleonitePercentage = json.get("showCorleonitePercentage").getAsBoolean();
+            if (json.has("showRespawnTimer")) config.showRespawnTimer = json.get("showRespawnTimer").getAsBoolean();
+            if (json.has("debugMode")) config.debugMode = json.get("debugMode").getAsBoolean();
+            if (json.has("timerSoundEnabled")) config.timerSoundEnabled = json.get("timerSoundEnabled").getAsBoolean();
+            if (json.has("language")) config.language = json.get("language").getAsString();
+            if (json.has("countingMode")) config.countingMode = json.get("countingMode").getAsString();
+            if (json.has("storedKills")) config.storedKills = json.get("storedKills").getAsInt();
+            if (json.has("storedCorleonite")) config.storedCorleonite = json.get("storedCorleonite").getAsInt();
+            if (json.has("clearWaypointsOnWorldChange")) config.clearWaypointsOnWorldChange = json.get("clearWaypointsOnWorldChange").getAsBoolean();
+            if (json.has("timerX")) config.timerX = json.get("timerX").getAsInt();
+            if (json.has("timerY")) config.timerY = json.get("timerY").getAsInt();
             if (json.has("lastMobId")) config.lastMobId = json.get("lastMobId").getAsString();
             if (json.has("lastMobName")) config.lastMobName = json.get("lastMobName").getAsString();
             if (json.has("API_KEY")) config.API_KEY = json.get("API_KEY").getAsString();
@@ -130,6 +151,16 @@ public class SkyblockCounterConfig {
             json.addProperty("hudY", hudY);
             json.addProperty("hudVisible", hudVisible);
             json.addProperty("showCorleonitePercentage", showCorleonitePercentage);
+            json.addProperty("showRespawnTimer", showRespawnTimer);
+            json.addProperty("debugMode", debugMode);
+            json.addProperty("timerSoundEnabled", timerSoundEnabled);
+            json.addProperty("language", language);
+            json.addProperty("countingMode", countingMode);
+            json.addProperty("storedKills", storedKills);
+            json.addProperty("storedCorleonite", storedCorleonite);
+            json.addProperty("clearWaypointsOnWorldChange", clearWaypointsOnWorldChange);
+            json.addProperty("timerX", timerX);
+            json.addProperty("timerY", timerY);
             json.addProperty("lastMobId", lastMobId);
             json.addProperty("lastMobName", lastMobName);
 
@@ -225,6 +256,86 @@ public class SkyblockCounterConfig {
 
     public void setShowCorleonitePercentage(boolean showCorleonitePercentage) {
         this.showCorleonitePercentage = showCorleonitePercentage;
+    }
+
+    public boolean isShowRespawnTimer() {
+        return showRespawnTimer;
+    }
+
+    public void setShowRespawnTimer(boolean showRespawnTimer) {
+        this.showRespawnTimer = showRespawnTimer;
+    }
+
+    public boolean isDebugMode() {
+        return debugMode;
+    }
+
+    public void setDebugMode(boolean debugMode) {
+        this.debugMode = debugMode;
+    }
+
+    public boolean isTimerSoundEnabled() {
+        return timerSoundEnabled;
+    }
+
+    public String getCountingMode() {
+        return countingMode;
+    }
+
+    public void setCountingMode(String countingMode) {
+        this.countingMode = countingMode;
+    }
+
+    public int getStoredKills() {
+        return storedKills;
+    }
+
+    public void setStoredKills(int storedKills) {
+        this.storedKills = storedKills;
+    }
+
+    public int getStoredCorleonite() {
+        return storedCorleonite;
+    }
+
+    public void setStoredCorleonite(int storedCorleonite) {
+        this.storedCorleonite = storedCorleonite;
+    }
+
+    public String getLanguage() {
+        return language;
+    }
+
+    public void setLanguage(String language) {
+        this.language = language;
+    }
+
+    public void setTimerSoundEnabled(boolean timerSoundEnabled) {
+        this.timerSoundEnabled = timerSoundEnabled;
+    }
+
+    public boolean isClearWaypointsOnWorldChange() {
+        return clearWaypointsOnWorldChange;
+    }
+
+    public void setClearWaypointsOnWorldChange(boolean clearWaypointsOnWorldChange) {
+        this.clearWaypointsOnWorldChange = clearWaypointsOnWorldChange;
+    }
+
+    public int getTimerX() {
+        return timerX;
+    }
+
+    public void setTimerX(int timerX) {
+        this.timerX = timerX;
+    }
+
+    public int getTimerY() {
+        return timerY;
+    }
+
+    public void setTimerY(int timerY) {
+        this.timerY = timerY;
     }
     
     public String getLastMobId() {

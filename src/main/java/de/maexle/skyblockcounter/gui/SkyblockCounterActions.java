@@ -94,6 +94,10 @@ public final class SkyblockCounterActions {
         SkyblockCounterService.setHudPosition(x, y);
     }
 
+    public static void setTimerPosition(int x, int y) {
+        SkyblockCounterService.setTimerPosition(x, y);
+    }
+
     public static void setApiKey(String apiKey) {
         SkyblockCounterConfig config = SkyblockCounterService.getConfig();
         config.setAPI_KEY(apiKey);
@@ -109,10 +113,13 @@ public final class SkyblockCounterActions {
         config.save();
     }
 
-    public static boolean toggleSession() {
-        boolean currentMode = SkyblockCounterService.isShowSessionKills();
-        SkyblockCounterService.setShowSessionKills(!currentMode);
-        return !currentMode;
+    /** Cycles through the four counting modes. */
+    public static de.maexle.skyblockcounter.CountingMode cycleCountingMode() {
+        return SkyblockCounterService.cycleCountingMode();
+    }
+
+    public static void setCountingMode(de.maexle.skyblockcounter.CountingMode mode) {
+        SkyblockCounterService.setCountingMode(mode);
     }
 
     public static void addSessionKills(int amount) {
@@ -128,7 +135,7 @@ public final class SkyblockCounterActions {
     }
 
     public static Optional<String> formatTimeFarmed() {
-        if (!SkyblockCounterService.isShowSessionKills()) {
+        if (!SkyblockCounterService.isLocalCounting()) {
             return Optional.empty();
         }
 
@@ -140,7 +147,7 @@ public final class SkyblockCounterActions {
     }
 
     public static Optional<String> formatCorleonitePerHour() {
-        if (!SkyblockCounterService.isShowSessionKills()) {
+        if (!SkyblockCounterService.isLocalCounting()) {
             return Optional.empty();
         }
 
@@ -155,7 +162,7 @@ public final class SkyblockCounterActions {
     }
 
     public static Optional<String> getCorleoniteStats() {
-        if (!SkyblockCounterService.isShowSessionKills()) {
+        if (!SkyblockCounterService.isLocalCounting()) {
             return Optional.empty();
         }
 
@@ -169,38 +176,80 @@ public final class SkyblockCounterActions {
         return Optional.of(String.format("Corleonite: %d | Drop: %.2f%%", corleoniteCount, percentage));
     }
 
+    // ---- Crystal Hollows geometry (fixed per instance) ----
+
+    /** Full Crystal Hollows bounds, confirmed by the wiki. */
+    private static final int HOLLOWS_MIN_X = 202;
+    private static final int HOLLOWS_MAX_X = 823;
+    private static final int HOLLOWS_MIN_Z = 202;
+    private static final int HOLLOWS_MAX_Z = 823;
+
+    /**
+     * Mithril Deposits: the north-east quadrant of the upper layer.
+     *
+     * <p>The community guide and wiki both give "X512 Z0 to X1024 Z512"; world bounds clamp
+     * that to the fixed Hollows extent. Boss Corleone only spawns in this quadrant, so there is
+     * no reason to scan the other three.
+     */
+    private static final int DEPOSITS_MIN_X = 512;
+    private static final int DEPOSITS_MAX_X = HOLLOWS_MAX_X;
+    private static final int DEPOSITS_MIN_Z = HOLLOWS_MIN_Z;
+    private static final int DEPOSITS_MAX_Z = 512;
+
+    /** Upper layer; the Magma Fields sit below Y=64 and never contain the boss. */
+    private static final int DEPOSITS_MIN_Y = 65;
+    private static final int DEPOSITS_MAX_Y = 188;
+
+    /** Chunk radius around the player, in chunks (16 = 256 blocks). */
+    private static final int SCAN_RADIUS_CHUNKS = 16;
+
     public static CorleoneFinderResult findCorleoneStructures(ClientLevel world, BlockPos playerPos) {
         System.out.println("Finding Corleone structures");
         if (world == null || playerPos == null) {
             return CorleoneFinderResult.notInWorld();
         }
 
-        int centerChunkX = playerPos.getX() >> 4;
-        int centerChunkZ = playerPos.getZ() >> 4;
-        int radius = 16;
+        // The whole scan is clamped to the Mithril Deposits rectangle, so players standing in
+        // another quadrant still search the correct area instead of their own surroundings.
+        int scanMinX = Math.max(DEPOSITS_MIN_X, playerPos.getX() - SCAN_RADIUS_CHUNKS * 16);
+        int scanMaxX = Math.min(DEPOSITS_MAX_X, playerPos.getX() + SCAN_RADIUS_CHUNKS * 16);
+        int scanMinZ = Math.max(DEPOSITS_MIN_Z, playerPos.getZ() - SCAN_RADIUS_CHUNKS * 16);
+        int scanMaxZ = Math.min(DEPOSITS_MAX_Z, playerPos.getZ() + SCAN_RADIUS_CHUNKS * 16);
+
+        if (scanMinX > scanMaxX || scanMinZ > scanMaxZ) {
+            return new CorleoneFinderResult(false,
+                    List.of("Not in the Mithril Deposits (expected X " + DEPOSITS_MIN_X + ".." + DEPOSITS_MAX_X
+                            + ", Z " + DEPOSITS_MIN_Z + ".." + DEPOSITS_MAX_Z + ")"));
+        }
+
+        int minChunkX = scanMinX >> 4;
+        int maxChunkX = scanMaxX >> 4;
+        int minChunkZ = scanMinZ >> 4;
+        int maxChunkZ = scanMaxZ >> 4;
 
         List<BlockPos> andesitePositions = new ArrayList<>();
         List<BlockPos> granitePositions = new ArrayList<>();
 
-        for (int xOffset = -radius; xOffset <= radius; xOffset++) {
-            for (int zOffset = -radius; zOffset <= radius; zOffset++) {
-                int chunkX = centerChunkX + xOffset;
-                int chunkZ = centerChunkZ + zOffset;
-
+        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
                 LevelChunk chunk = world.getChunk(chunkX, chunkZ);
                 if (chunk == null) {
                     continue;
                 }
 
-                int startX = chunk.getPos().getMinBlockX();
-                int startZ = chunk.getPos().getMinBlockZ();
-                int bottomY = world.getMinY();
-                int topY = world.getMaxY();
-
                 for (int x = 0; x < 16; x++) {
+                    int worldX = (chunkX << 4) + x;
+                    if (worldX < scanMinX || worldX > scanMaxX) {
+                        continue;
+                    }
                     for (int z = 0; z < 16; z++) {
-                        for (int y = bottomY + 3; y < topY - 2; y++) {
-                            BlockPos basePos = new BlockPos(startX + x, y, startZ + z);
+                        int worldZ = (chunkZ << 4) + z;
+                        if (worldZ < scanMinZ || worldZ > scanMaxZ) {
+                            continue;
+                        }
+                        // Only the upper layer: Magma Fields (Y<64) never hold the boss.
+                        for (int y = DEPOSITS_MIN_Y; y <= DEPOSITS_MAX_Y; y++) {
+                            BlockPos basePos = new BlockPos(worldX, y, worldZ);
 
                             if (chunk.getBlockState(basePos).is(Blocks.POLISHED_ANDESITE)
                                     && chunk.getBlockState(basePos.above()).is(Blocks.STONE_BRICK_STAIRS)
@@ -209,9 +258,9 @@ public final class SkyblockCounterActions {
                             }
 
                             if (chunk.getBlockState(basePos).is(Blocks.POLISHED_GRANITE)
-                                    && world.getBlockState(basePos.below(1)).is(Blocks.POLISHED_GRANITE)
-                                    && world.getBlockState(basePos.below(2)).is(Blocks.POLISHED_GRANITE)
-                                    && world.getBlockState(basePos.below(3)).is(Blocks.POLISHED_GRANITE)) {
+                                    && chunk.getBlockState(basePos.below(1)).is(Blocks.POLISHED_GRANITE)
+                                    && chunk.getBlockState(basePos.below(2)).is(Blocks.POLISHED_GRANITE)
+                                    && chunk.getBlockState(basePos.below(3)).is(Blocks.POLISHED_GRANITE)) {
                                 BlockPos[] step1Dirs = {basePos.north(), basePos.south(), basePos.east(), basePos.west()};
                                 BlockPos[] step2Dirs = {basePos.north(2), basePos.south(2), basePos.east(2), basePos.west(2)};
 
@@ -241,7 +290,7 @@ public final class SkyblockCounterActions {
         if (!granitePositions.isEmpty()) {
             BlockPos centerPos = averagePosition(granitePositions);
             // 513, 85, 541 is a false positive, the crystal nucleus is not a corleone structure
-            if(!(centerPos.getX() == 513 && centerPos.getY() == 85 && centerPos.getZ() == 541)) {
+            if (!(centerPos.getX() == 513 && centerPos.getY() == 85 && centerPos.getZ() == 541)) {
                 foundWaypoints.add(new WaypointManager.Waypoint(centerPos, "Corleone Structure 2"));
                 messages.add("Corleone structure 2 found at: " + centerPos.toShortString());
             }
@@ -252,6 +301,8 @@ public final class SkyblockCounterActions {
         }
 
         WaypointManager.setWaypoints(foundWaypoints);
+        // Build one respawn timer per discovered structure.
+        de.maexle.skyblockcounter.RespawnTimer.syncFromWaypoints();
 
         return new CorleoneFinderResult(true, messages);
     }

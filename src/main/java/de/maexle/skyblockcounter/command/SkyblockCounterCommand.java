@@ -62,6 +62,26 @@ public class SkyblockCounterCommand {
                 .then(literal("uuid")
                         .then(argument("uuid", StringArgumentType.string())
                                 .executes(SkyblockCounterCommand::setUndashedUuid)))
+                .then(literal("hud")
+                        .executes(SkyblockCounterCommand::openHudEditor))
+                .then(literal("debug")
+                        .executes(SkyblockCounterCommand::toggleDebugMode)
+                        .then(literal("on")
+                                .executes(SkyblockCounterCommand::enableDebugMode))
+                        .then(literal("off")
+                                .executes(SkyblockCounterCommand::disableDebugMode)))
+                .then(literal("timer")
+                        .executes(SkyblockCounterCommand::toggleTimerHud)
+                        .then(literal("on")
+                                .executes(SkyblockCounterCommand::enableTimerHud))
+                        .then(literal("off")
+                                .executes(SkyblockCounterCommand::disableTimerHud))
+                        .then(literal("start")
+                                .executes(SkyblockCounterCommand::startRespawnTimer))
+                        .then(literal("stop")
+                                .executes(SkyblockCounterCommand::stopRespawnTimer))
+                        .then(literal("status")
+                                .executes(SkyblockCounterCommand::timerStatus)))
                 .then(literal("session")
                         .then(literal("toggle")
                                 .executes(SkyblockCounterCommand::toggleSessionMode))
@@ -94,6 +114,85 @@ public class SkyblockCounterCommand {
         client.execute(() -> {
             client.setScreen(new SkyblockCounterConfigScreen(null));
         });
+        return 1;
+    }
+
+    private static int openHudEditor(CommandContext<FabricClientCommandSource> context) {
+        Minecraft client = context.getSource().getClient();
+        client.execute(() -> {
+            if (client.screen == null) {
+                client.setScreen(new de.maexle.skyblockcounter.gui.HudEditorScreen(null));
+            }
+        });
+        return 1;
+    }
+
+    private static int toggleDebugMode(CommandContext<FabricClientCommandSource> context) {
+        boolean enabled = SkyblockCounterService.toggleDebugMode();
+        sendPrefixMessage(context.getSource(), "Debug mode " + (enabled ? "enabled - HUD now shows in any world" : "disabled"));
+        return 1;
+    }
+
+    private static int enableDebugMode(CommandContext<FabricClientCommandSource> context) {
+        SkyblockCounterService.setDebugMode(true);
+        sendPrefixMessage(context.getSource(), "Debug mode enabled - HUD now shows in any world");
+        return 1;
+    }
+
+    private static int disableDebugMode(CommandContext<FabricClientCommandSource> context) {
+        SkyblockCounterService.setDebugMode(false);
+        sendPrefixMessage(context.getSource(), "Debug mode disabled");
+        return 1;
+    }
+
+    private static int toggleTimerHud(CommandContext<FabricClientCommandSource> context) {
+        SkyblockCounterService.setShowRespawnTimer(!SkyblockCounterService.isShowRespawnTimer());
+        sendPrefixMessage(context.getSource(), "Respawn timer HUD "
+                + (SkyblockCounterService.isShowRespawnTimer() ? "enabled" : "disabled"));
+        return 1;
+    }
+
+    private static int enableTimerHud(CommandContext<FabricClientCommandSource> context) {
+        SkyblockCounterService.setShowRespawnTimer(true);
+        sendPrefixMessage(context.getSource(), "Respawn timer HUD enabled");
+        return 1;
+    }
+
+    private static int disableTimerHud(CommandContext<FabricClientCommandSource> context) {
+        SkyblockCounterService.setShowRespawnTimer(false);
+        sendPrefixMessage(context.getSource(), "Respawn timer HUD disabled");
+        return 1;
+    }
+
+    private static int startRespawnTimer(CommandContext<FabricClientCommandSource> context) {
+        de.maexle.skyblockcounter.RespawnTimer.syncFromWaypoints();
+        de.maexle.skyblockcounter.RespawnTimer.startFallback();
+        int count = de.maexle.skyblockcounter.RespawnTimer.getTimers().size();
+        sendPrefixMessage(context.getSource(), "Respawn timers started for " + count + " structure(s)");
+        return 1;
+    }
+
+    private static int stopRespawnTimer(CommandContext<FabricClientCommandSource> context) {
+        de.maexle.skyblockcounter.RespawnTimer.stopAll();
+        sendPrefixMessage(context.getSource(), "Respawn timers stopped");
+        return 1;
+    }
+
+    private static int timerStatus(CommandContext<FabricClientCommandSource> context) {
+        var timers = de.maexle.skyblockcounter.RespawnTimer.getTimers();
+        if (timers.isEmpty()) {
+            sendPrefixMessage(context.getSource(), "Respawn timer: no structure scanned yet");
+            return 1;
+        }
+        for (var timer : timers) {
+            String line = timer.started()
+                    ? timer.label() + ": 60s="
+                        + (timer.slotElapsed(0) ? "READY" : de.maexle.skyblockcounter.RespawnTimer.format(timer.remainingForSlot(0)))
+                        + " 120s="
+                        + (timer.slotElapsed(1) ? "READY" : de.maexle.skyblockcounter.RespawnTimer.format(timer.remainingForSlot(1)))
+                    : timer.label() + ": idle";
+            sendPrefixMessage(context.getSource(), line);
+        }
         return 1;
     }
 
@@ -227,8 +326,8 @@ public class SkyblockCounterCommand {
     }
 
     private static int toggleSessionMode(CommandContext<FabricClientCommandSource> context) {
-        boolean enabled = SkyblockCounterActions.toggleSession();
-        sendPrefixMessage(context.getSource(), "Session mode: " + (enabled ? "ON" : "OFF"));
+        de.maexle.skyblockcounter.CountingMode mode = SkyblockCounterActions.cycleCountingMode();
+        sendPrefixMessage(context.getSource(), "Counting mode: " + mode.displayName());
         return 1;
     }
 
