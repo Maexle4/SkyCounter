@@ -17,8 +17,16 @@ public class StyledButtonWidget extends AbstractWidget {
     }
 
     public StyledButtonWidget(int x, int y, int width, int height, Component message, PressAction onPress) {
+        this(x, y, width, height, message, onPress, true);
+    }
+
+    /** Variant that can start disabled, used for controls that only apply in local modes. */
+    public StyledButtonWidget(int x, int y, int width, int height, Component message,
+                              PressAction onPress, boolean enabled) {
         super(x, y, width, height, message);
         this.onPress = onPress;
+        this.active = enabled;
+        this.visible = enabled;
     }
 
     public void setActiveHighlight(boolean activeHighlight) {
@@ -41,8 +49,9 @@ public class StyledButtonWidget extends AbstractWidget {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        if (this.active && this.visible && event.button() == 0) {
+        if (this.active && this.visible && isValidClickButton(event.buttonInfo())) {
             if (this.isMouseOver(event.x(), event.y())) {
+                this.playDownSound(Minecraft.getInstance().getSoundManager());
                 this.onClick(event, doubleClick);
                 return true;
             }

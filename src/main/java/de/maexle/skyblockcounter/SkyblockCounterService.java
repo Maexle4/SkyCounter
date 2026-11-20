@@ -13,7 +13,10 @@ import net.minecraft.client.gui.render.*;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientEntityEvents;
+import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLevelEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import de.maexle.skyblockcounter.waypoint.WaypointManager;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.nbt.CompoundTag;
@@ -55,9 +58,34 @@ public class SkyblockCounterService {
     private static volatile int hudX;
     private static volatile int hudY;
     private static volatile int startSessionKills = 0;
-    private static volatile boolean showSessionKills = false;
+    private static volatile CountingMode countingMode = CountingMode.API;
     private static volatile boolean showCorleonitePercentage = false;
+    private static volatile boolean showRespawnTimerHud = true;
+    private static volatile boolean debugMode = false;
+
+    /**
+     * True while the in-game HUD editor is open. The editor draws the elements itself at the
+     * real cursor-driven positions, so the normal HUD renderer must stay silent to avoid
+     * drawing everything twice.
+     */
+    private static volatile boolean hudEditorActive = false;
+
+    public static void setHudEditorActive(boolean active) {
+        hudEditorActive = active;
+    }
+
+    public static boolean isHudEditorActive() {
+        return hudEditorActive;
+    }
+    private static volatile int timerX;
+    private static volatile int timerY;
     private static volatile int cachedCorleoniteCount = 0;
+
+    /**
+     * Corleonite collected as reported by Hypixel's [Sacks] messages. Items that go straight
+     * into a sack never appear in the inventory, so this is the only reliable source.
+     */
+    private static volatile int sackCorleoniteTotal = 0;
 
     private static volatile int localSessionKills = 0;
     private static volatile int localSessionStartCorleonite = 0;
@@ -68,6 +96,11 @@ public class SkyblockCounterService {
     private static final Identifier ZEALOT_HEAD = Identifier.fromNamespaceAndPath("skyblockcounter", "zealot_enderman_head");
 
     private static final int HEAD_SIZE = 16;
+
+    /** Size of one respawn timer row, one row per Corleone structure. */
+    public static final int TIMER_PANEL_WIDTH = 168;
+    public static final int TIMER_PANEL_HEIGHT = 34;
+    private static final int TIMER_ROW_GAP = 4;
 
     List<SkyblockCounterConfig.MobEntry> entries = SkyblockCounterService.getConfig().getMobEntries();
 
@@ -82,9 +115,21 @@ public class SkyblockCounterService {
 
     static {
         config = SkyblockCounterConfig.load();
+        de.maexle.skyblockcounter.i18n.ModLang.setCurrent(
+                "zh_cn".equals(config.getLanguage())
+                        ? de.maexle.skyblockcounter.i18n.ModLang.Language.CHINESE
+                        : de.maexle.skyblockcounter.i18n.ModLang.Language.ENGLISH);
         hudX = config.getHudX();
         guiVisible = config.isHudVisible();
         showCorleonitePercentage = config.isShowCorleonitePercentage();
+        showRespawnTimerHud = config.isShowRespawnTimer();
+        debugMode = config.isDebugMode();
+        countingMode = CountingMode.fromId(config.getCountingMode());
+        if (countingMode.isPersistent()) {
+            localSessionKills = config.getStoredKills();
+        }
+        timerX = config.getTimerX();
+        timerY = config.getTimerY();
         API_KEY = config.getAPI_KEY();
         undashedUuid = config.getundashedUuid();
         hudY = config.getHudY();
@@ -136,6 +181,19 @@ public class SkyblockCounterService {
             }
         });
 
+        // Optionally drop saved waypoints when the player switches world/island, so stale
+        // coordinates from the previous island do not stay on the screen.
+        ClientLevelEvents.AFTER_CLIENT_LEVEL_CHANGE.register((client, level) -> {
+            // Per-world counting mode resets its own counter here; API mode is unaffected.
+            onWorldChanged();
+
+            if (config.isClearWaypointsOnWorldChange()) {
+                WaypointManager.clearAll();
+                RespawnTimer.stopAll();
+                LOGGER.info("World changed - cleared saved waypoints and respawn timers");
+            }
+        });
+
         ClientEntityEvents.ENTITY_UNLOAD.register((entity, world) -> {
             knownCorleones.remove(entity.getId());
 
@@ -147,8 +205,16 @@ public class SkyblockCounterService {
                     if (now - lastUnloadTrigger > 2000) {
                         lastUnloadTrigger = now;
 
-                        if (showSessionKills) {
+                        // Attribute the kill to the closest scanned structure so only that
+                        // structure's countdown restarts while the others keep running.
+                        RespawnTimer.startNearest(entity.blockPosition());
+
+                        if (countingMode.isLocal()) {
                             localSessionKills++;
+                            if (countingMode.isPersistent()) {
+                                config.setStoredKills(localSessionKills);
+                                config.save();
+                            }
                             LOGGER.info("[DEBUG] " + name + " getötet! Lokale Session-Kills: " + localSessionKills);
                             scheduler.schedule(this::pingForNextCorleone, 120, TimeUnit.SECONDS);
                         } else {
@@ -161,29 +227,47 @@ public class SkyblockCounterService {
             }
         });
 
+        // Hypixel reports everything that lands in a sack via [Sacks] messages whose real
+        // contents are inside a hover tooltip. Read them from the component tree instead of
+        // sniffing the inventory, which misses items that never reach it.
+        ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
+            int gained = SackMessageParser.parseCorleonite(message);
+            if (gained > 0) {
+                sackCorleoniteTotal += gained;
+                LOGGER.info("[Sacks] Corleonite total now " + sackCorleoniteTotal);
+            }
+        });
+
         // 30s
         scheduler.scheduleAtFixedRate(this::fetchCurrentBestiaryKills, 0, 30, TimeUnit.SECONDS);
     }
 
+    /**
+     * Optional chime that plays when the respawn window is over.
+     *
+     * <p>Gated only by the explicit {@code timerSoundEnabled} switch. It previously checked the
+     * live session-mode flag instead, so a timer scheduled while session mode was off would
+     * still fire after the player enabled it, which looked like random noise.
+     */
     private void pingForNextCorleone() {
-        if(isShowSessionKills()){
-            Minecraft client = Minecraft.getInstance();
-            if (client.player != null) {
-                for (int i = 0; i < 3; i++) {
-                    scheduler.schedule(() -> {
-                        client.execute(() -> {
-                            if (client.player != null) {
-                                client.player.playSound(SoundEvents.EXPERIENCE_ORB_PICKUP, 25.0F, 1.0F);
-                            }
-                        });
-                    }, (long) i * 300, TimeUnit.MILLISECONDS);
+        if (!config.isTimerSoundEnabled()) {
+            return;
+        }
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null) {
+            return;
+        }
+        for (int i = 0; i < 3; i++) {
+            scheduler.schedule(() -> client.execute(() -> {
+                if (client.player != null) {
+                    client.player.playSound(SoundEvents.EXPERIENCE_ORB_PICKUP, 1.0F, 1.0F);
                 }
-            }
+            }), (long) i * 300, TimeUnit.MILLISECONDS);
         }
     }
 
     private void fetchCurrentBestiaryKills() {
-        if (showSessionKills) return;
+        if (countingMode.isLocal()) return;
 
         retrieveBestiaryKillsAsync(undashedUuid, currentMobId)
                 .thenAccept(kills -> {
@@ -201,11 +285,170 @@ public class SkyblockCounterService {
         HudElementRegistry.addLast(
                 Identifier.fromNamespaceAndPath("skyblockcounter", "hud_element"),
                 (drawContext, tickCounter) -> {
-                    if (guiVisible) {
+                    if (!hudEditorActive && (guiVisible || debugMode)) {
                         renderHud(drawContext);
                     }
                 }
         );
+
+        HudElementRegistry.addLast(
+                Identifier.fromNamespaceAndPath("skyblockcounter", "respawn_timer"),
+                (drawContext, tickCounter) -> {
+                    if (!showRespawnTimerHud || hudEditorActive) {
+                        return;
+                    }
+                    RespawnTimer.pruneFinished();
+
+                    if (RespawnTimer.anyVisible()) {
+                        renderRespawnTimers(drawContext);
+                    } else if (debugMode) {
+                        // Debug mode: keep a preview panel on screen so the layout can be
+                        // checked in a singleplayer world without waiting for a kill.
+                        renderRespawnTimerPreview(drawContext);
+                    }
+                }
+        );
+    }
+
+    /** Inactive-state preview of the timer panel, used by debug mode. */
+    private void renderRespawnTimerPreview(GuiGraphicsExtractor drawContext) {
+        Minecraft mc = Minecraft.getInstance();
+
+        if (mc.player == null || mc.level == null || mc.options.hideGui) {
+            return;
+        }
+
+        int panelWidth = TIMER_PANEL_WIDTH;
+        int panelHeight = TIMER_PANEL_HEIGHT;
+
+        drawRoundedRect(drawContext, timerX, timerY, panelWidth, panelHeight, 0xFF5A4A7A);
+        drawRoundedRect(drawContext, timerX + 1, timerY + 1, panelWidth - 2, panelHeight - 2, 0xD01B1A23);
+        drawRoundedRect(drawContext, timerX + 2, timerY + 2, 3, panelHeight - 4, 0xFFB16EFF);
+
+        drawContext.text(mc.font, "Corleone",
+                timerX + 11, timerY + 5, 0xFFA7A3B3, false);
+        drawContext.text(mc.font, "DEBUG",
+                timerX + panelWidth - 40, timerY + 5, 0xFFFFC24B, false);
+
+        // Preview both candidate windows so the two-segment layout can be judged.
+        drawTwoSegments(drawContext, mc, timerX + 11, timerY + 15, panelWidth - 20,
+                RespawnTimer.SHORT_WINDOW_MS, RespawnTimer.LONG_WINDOW_MS, 0xFF8A8798, 0xFF8A8798, false, false);
+
+        drawContext.fill(timerX + 11, timerY + panelHeight - 8,
+                timerX + 11 + (panelWidth - 20), timerY + panelHeight - 5, 0xFF322F3E);
+    }
+
+    /**
+     * Draws one row per Corleone structure. Each row shows the two candidate respawn windows
+     * (60s and 120s) as two segments, with the segment for the current cycle highlighted.
+     */
+    private void renderRespawnTimers(GuiGraphicsExtractor drawContext) {
+        Minecraft mc = Minecraft.getInstance();
+
+        if (mc.player == null || mc.level == null || mc.options.hideGui) {
+            return;
+        }
+
+        drawRespawnTimersAt(drawContext, timerX, timerY);
+    }
+
+    /** Draws the structure timer rows starting at the given screen position. */
+    public static void drawRespawnTimersAt(GuiGraphicsExtractor drawContext, int startX, int startY) {
+        Minecraft mc = Minecraft.getInstance();
+
+        int y = startY;
+        for (RespawnTimer.StructureTimer timer : RespawnTimer.getTimers()) {
+            if (!timer.started() || timer.shouldHide()) {
+                continue;
+            }
+
+            boolean allDone = timer.hasElapsed();
+            int accentColor = timer.color();
+            int borderColor = allDone ? 0xFF3E7C55 : 0xFF3D3A4C;
+
+            drawRoundedRect(drawContext, startX, y, TIMER_PANEL_WIDTH, TIMER_PANEL_HEIGHT, borderColor);
+            drawRoundedRect(drawContext, startX + 1, y + 1, TIMER_PANEL_WIDTH - 2, TIMER_PANEL_HEIGHT - 2, 0xF01B1A23);
+            drawRoundedRect(drawContext, startX + 2, y + 2, 3, TIMER_PANEL_HEIGHT - 4, accentColor);
+
+            drawContext.text(mc.font, timer.label(),
+                    startX + 11, y + 5, 0xFFA7A3B3, false);
+
+            // Both windows run in parallel from the kill; each one turns green when it passes.
+            long shortRemaining = timer.remainingForSlot(0);
+            long longRemaining = timer.remainingForSlot(1);
+            boolean shortDone = timer.slotElapsed(0);
+            boolean longDone = timer.slotElapsed(1);
+
+            int countingColor = 0xFFFFFFFF;
+            int doneColor = 0xFF4ADE80;
+
+            drawTwoSegments(drawContext, mc, startX + 11, y + 15, TIMER_PANEL_WIDTH - 20,
+                    shortRemaining, longRemaining,
+                    shortDone ? doneColor : countingColor,
+                    longDone ? doneColor : countingColor,
+                    shortDone, longDone);
+
+            int barX = startX + 11;
+            int barY = y + TIMER_PANEL_HEIGHT - 8;
+            int barWidth = TIMER_PANEL_WIDTH - 20;
+            drawContext.fill(barX, barY, barX + barWidth, barY + 3, 0xFF322F3E);
+
+            // Single bar tracking the 120s window, which is the one that matters once the
+            // 60s window has already passed.
+            int filled = Math.round(barWidth * (1.0F - timer.progressForSlot(1)));
+            if (filled > 0) {
+                drawContext.fill(barX, barY, barX + filled, barY + 3, longDone ? doneColor : accentColor);
+            }
+
+            y += TIMER_PANEL_HEIGHT + TIMER_ROW_GAP;
+        }
+    }
+
+    /** Height the timer block occupies for the given number of visible rows. */
+    public static int timerBlockHeight() {
+        int rows = 0;
+        for (RespawnTimer.StructureTimer timer : RespawnTimer.getTimers()) {
+            if (timer.started() && !timer.shouldHide()) {
+                rows++;
+            }
+        }
+        return rows == 0 ? TIMER_PANEL_HEIGHT : rows * TIMER_PANEL_HEIGHT + (rows - 1) * TIMER_ROW_GAP;
+    }
+
+    /**
+     * Renders two "60s / 120s" segments on a single line. The left segment is the short
+     * window and the right segment is the long window.
+     */
+    private static void drawTwoSegments(GuiGraphicsExtractor context, Minecraft mc, int x, int y, int width,
+                                        long shortRemaining, long longRemaining,
+                                        int shortColor, int longColor,
+                                        boolean shortDone, boolean longDone) {
+        String shortText = shortDone ? "READY" : RespawnTimer.format(shortRemaining);
+        String longText = longDone ? "READY" : RespawnTimer.format(longRemaining);
+
+        String label60 = "60s ";
+        String label120 = " 120s ";
+
+        int x60 = x;
+        context.text(mc.font, label60, x60, y, 0xFF6E6A7C, false);
+        x60 += mc.font.width(label60);
+        context.text(mc.font, shortText, x60, y, shortColor, false);
+
+        int sepX = x + (width / 2) - 2;
+        context.text(mc.font, "|", sepX, y, 0xFF3D3A4C, false);
+
+        int x120 = sepX + mc.font.width("|") + 4;
+        context.text(mc.font, label120, x120, y, 0xFF6E6A7C, false);
+        x120 += mc.font.width(label120);
+        context.text(mc.font, longText, x120, y, longColor, false);
+    }
+
+    private static void drawRoundedRect(GuiGraphicsExtractor context, int x, int y, int width, int height, int color) {
+        context.fill(x + 2, y, x + width - 2, y + 1, color);
+        context.fill(x + 1, y + 1, x + width - 1, y + 2, color);
+        context.fill(x, y + 2, x + width, y + height - 2, color);
+        context.fill(x + 1, y + height - 2, x + width - 1, y + height - 1, color);
+        context.fill(x + 2, y + height - 1, x + width - 2, y + height, color);
     }
 
     private void renderHud(GuiGraphicsExtractor drawContext) {
@@ -230,26 +473,54 @@ public class SkyblockCounterService {
         int xPos = hudX;
         int yPos = hudY;
 
-        int displayKills = showSessionKills ? localSessionKills : currentKills;
+        drawKillsAt(drawContext, xPos, yPos);
+    }
+
+    /** Draws the kill counter (head icon + count) at the given screen position. */
+    public static void drawKillsAt(GuiGraphicsExtractor drawContext, int xPos, int yPos) {
+        Minecraft mc = Minecraft.getInstance();
+
+        int displayKills = countingMode.isLocal() ? localSessionKills : currentKills;
+
+        if (debugMode && displayKills < 0) {
+            // Debug mode: no API data available in a singleplayer test world,
+            // so show a plausible placeholder instead of "-1".
+            displayKills = 0;
+        }
+
         String text = "" + displayKills;
 
-        if (showSessionKills && showCorleonitePercentage && displayKills > 0) {
-            int currentLocalCorleonite = getLocalCorleoniteCount();
-
-            double percentage = (currentLocalCorleonite * 100.0) / displayKills;
+        if (countingMode.isLocal() && showCorleonitePercentage && displayKills > 0) {
+            // Only the Corleonite gained during this run counts, so subtract the baseline
+            // captured when the mode/counter was (re)started.
+            int gainedCorleonite = getLocalCorleoniteCount() - localSessionStartCorleonite;
+            gainedCorleonite = Math.max(0, gainedCorleonite);
+            double percentage = (gainedCorleonite * 100.0) / displayKills;
             text = displayKills + " | " + String.format("%.2f%%", percentage);
-
-        } else if (!showSessionKills && showCorleonitePercentage && displayKills > 0) {
+        } else if (!countingMode.isLocal() && showCorleonitePercentage && displayKills > 0) {
             double percentage = (cachedCorleoniteCount * 100.0) / displayKills;
             text = displayKills + " | " + String.format("%.2f%%", percentage);
         }
 
         Identifier headTexture = MOB_TEXTURES.getOrDefault(currentMobId, TREASURE_HOARDER_HEAD);
-
         drawContext.blitSprite(RenderPipelines.GUI_TEXTURED, headTexture, xPos, yPos, HEAD_SIZE, HEAD_SIZE);
 
-        int textX = xPos + HEAD_SIZE + 4;
-        drawContext.text(mc.font, text, textX, yPos + (HEAD_SIZE / 4), 0xFFFFFFFF, false);
+        drawContext.text(mc.font, text, xPos + HEAD_SIZE + 4, yPos + (HEAD_SIZE / 4), 0xFFFFFFFF, false);
+    }
+
+    /** Width the kill counter occupies, used to size the drag target. */
+    public static int killHudWidth() {
+        Minecraft mc = Minecraft.getInstance();
+        int displayKills = countingMode.isLocal() ? localSessionKills : currentKills;
+        if (displayKills < 0) {
+            displayKills = 0;
+        }
+        return HEAD_SIZE + 4 + Math.max(14, mc.font.width("" + displayKills) + 12);
+    }
+
+    /** Height of the kill counter row. */
+    public static int killHudHeight() {
+        return HEAD_SIZE;
     }
 
     private static CompletableFuture<Integer> retrieveBestiaryKillsAsync(String uuid, String mobId) {
@@ -395,31 +666,163 @@ public class SkyblockCounterService {
         LOGGER.info("HUD Position geändert und gespeichert: X=" + x + ", Y=" + y);
     }
 
-    public static boolean isShowSessionKills() {
-        return showSessionKills;
+    public static CountingMode getCountingMode() {
+        return countingMode;
     }
 
-    public static void setShowSessionKills(boolean show) {
-        if (show && !showSessionKills) {
+    /** True for any mode that counts locally instead of reading the Hypixel API. */
+    public static boolean isLocalCounting() {
+        return countingMode.isLocal();
+    }
+
+    /** Kept for callers that only care whether a local counter is active. */
+    public static boolean isShowSessionKills() {
+        return countingMode.isLocal();
+    }
+
+    /**
+     * Switches the counting mode. Local modes restart their counter from zero (except the
+     * persistent one, which restores its stored value), and the Corleonite baseline is
+     * re-captured so the drop rate belongs to the new mode.
+     */
+    public static void setCountingMode(CountingMode mode) {
+        if (mode == null || mode == countingMode) {
+            return;
+        }
+
+        countingMode = mode;
+        config.setCountingMode(mode.id());
+
+        switch (mode) {
+            case LOCAL_PERSISTENT -> {
+                localSessionKills = config.getStoredKills();
+                localSessionStartCorleonite = Math.max(0, config.getStoredCorleonite());
+            }
+            case LOCAL_SESSION, LOCAL_PER_WORLD -> {
+                localSessionKills = 0;
+                localSessionStartCorleonite = getLocalCorleoniteCount();
+            }
+            case API -> {
+                // Nothing local is used; leave currentKills to the API poller.
+            }
+        }
+
+        sessionStartTime = System.currentTimeMillis();
+        config.save();
+        LOGGER.info("Counting mode set to " + mode.id() + " (local kills: " + localSessionKills + ")");
+    }
+
+    public static CountingMode cycleCountingMode() {
+        setCountingMode(countingMode.next());
+        return countingMode;
+    }
+
+    /** Clears the local counter (and, for the persistent mode, the stored value). */
+    public static void resetLocalCounting() {
+        localSessionKills = 0;
+        localSessionStartCorleonite = getLocalCorleoniteCount();
+        sessionStartTime = System.currentTimeMillis();
+        if (countingMode.isPersistent()) {
+            config.setStoredKills(0);
+            config.setStoredCorleonite(localSessionStartCorleonite);
+        }
+        config.save();
+    }
+
+    /** Called when the player changes world; only the per-world mode resets. */
+    public static void onWorldChanged() {
+        if (countingMode.resetsOnWorldChange()) {
             localSessionKills = 0;
             localSessionStartCorleonite = getLocalCorleoniteCount();
-
             sessionStartTime = System.currentTimeMillis();
-
-            LOGGER.info("Session-Kills Modus aktiviert. Lokale Kills: 0, Start-Corleonite: " + localSessionStartCorleonite);
-
-        } else if (!show) {
-            LOGGER.info("Session-Kills Modus deaktiviert");
+            LOGGER.info("World changed - per-world kill counter reset to 0");
         }
-        showSessionKills = show;
     }
 
     public static int getSessionKills() {
-        return showSessionKills ? localSessionKills : 0;
+        return countingMode.isLocal() ? localSessionKills : 0;
     }
 
     public static boolean isShowCorleonitePercentage() {
         return showCorleonitePercentage;
+    }
+
+    public static boolean isShowRespawnTimer() {
+        return showRespawnTimerHud;
+    }
+
+    public static boolean isDebugMode() {
+        return debugMode;
+    }
+
+    public static boolean isTimerSoundEnabled() {
+        return config.isTimerSoundEnabled();
+    }
+
+    /** Switches the mod UI language and persists the choice. */
+    public static void setModLanguage(de.maexle.skyblockcounter.i18n.ModLang.Language language) {
+        de.maexle.skyblockcounter.i18n.ModLang.setCurrent(language);
+        config.setLanguage(language.id());
+        config.save();
+        LOGGER.info("Mod language set to " + language.id());
+    }
+
+    public static de.maexle.skyblockcounter.i18n.ModLang.Language getModLanguage() {
+        return de.maexle.skyblockcounter.i18n.ModLang.current();
+    }
+
+    public static void setTimerSoundEnabled(boolean enabled) {
+        config.setTimerSoundEnabled(enabled);
+        config.save();
+        LOGGER.info("Respawn timer sound " + (enabled ? "enabled" : "disabled"));
+    }
+
+    public static boolean isClearWaypointsOnWorldChange() {
+        return config.isClearWaypointsOnWorldChange();
+    }
+
+    public static void setClearWaypointsOnWorldChange(boolean clear) {
+        config.setClearWaypointsOnWorldChange(clear);
+        config.save();
+        LOGGER.info("Clear waypoints on world change " + (clear ? "enabled" : "disabled"));
+    }
+
+    /**
+     * Debug mode makes both HUD elements render outside of Skyblock (for example in a
+     * singleplayer test world) without needing a Hypixel API key or a real Corleone kill.
+     */
+    public static void setDebugMode(boolean enabled) {
+        debugMode = enabled;
+        config.setDebugMode(enabled);
+        config.save();
+        LOGGER.info("Debug mode " + (enabled ? "enabled" : "disabled"));
+    }
+
+    public static boolean toggleDebugMode() {
+        setDebugMode(!debugMode);
+        return debugMode;
+    }
+
+    public static void setShowRespawnTimer(boolean show) {
+        showRespawnTimerHud = show;
+        config.setShowRespawnTimer(show);
+        config.save();
+    }
+
+    public static int getTimerX() {
+        return timerX;
+    }
+
+    public static int getTimerY() {
+        return timerY;
+    }
+
+    public static void setTimerPosition(int x, int y) {
+        timerX = x;
+        timerY = y;
+        config.setTimerX(x);
+        config.setTimerY(y);
+        config.save();
     }
 
     public static void setShowCorleonitePercentage(boolean show) {
@@ -508,7 +911,19 @@ public class SkyblockCounterService {
         LOGGER.info("Mob-Textures neu geladen: " + MOB_TEXTURES.size() + " Mobs");
     }
 
+    /**
+     * Corleonite collected this session, sourced from Hypixel's [Sacks] messages.
+     *
+     * <p>Sacks swallow the item immediately, so scanning the player inventory would always
+     * report zero for them. The value is still topped up by whatever is currently held in the
+     * inventory, in case a sack message was missed while the item was collected manually.
+     */
     public static int getLocalCorleoniteCount() {
+        return sackCorleoniteTotal + countCorleoniteInInventory();
+    }
+
+    /** Corleonite currently sitting in the player inventory. */
+    private static int countCorleoniteInInventory() {
         Minecraft client = Minecraft.getInstance();
         if (client.player == null) return 0;
 
@@ -520,6 +935,23 @@ public class SkyblockCounterService {
             }
         }
         return count;
+    }
+
+    public static int getSackCorleoniteTotal() {
+        return sackCorleoniteTotal;
+    }
+
+    public static void resetSackCorleoniteTotal() {
+        sackCorleoniteTotal = 0;
+    }
+
+    /**
+     * Manually adjusts the Corleonite counter, for cases where a [Sacks] message was missed
+     * (for example while the chat was flooded or an item was picked up manually).
+     */
+    public static void adjustSackCorleonite(int delta) {
+        sackCorleoniteTotal = Math.max(0, sackCorleoniteTotal + delta);
+        LOGGER.info("[Sacks] Corleonite manually adjusted by " + delta + " -> " + sackCorleoniteTotal);
     }
 
     public static CompletableFuture<Integer> getCorleoniteCount() {

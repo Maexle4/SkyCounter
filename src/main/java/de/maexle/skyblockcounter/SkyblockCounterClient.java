@@ -16,6 +16,8 @@ public class SkyblockCounterClient implements ClientModInitializer {
 
     private static final KeyMapping.Category SKYCOUNTER_CATEGORY = KeyMapping.Category.register(SkyblockCounter.id("general"));
     private static KeyMapping toggleHudKey;
+    private static KeyMapping debugKey;
+    private static KeyMapping hudEditorKey;
     public static KeyMapping openConfigKey;
 
     @Override
@@ -32,13 +34,33 @@ public class SkyblockCounterClient implements ClientModInitializer {
                 GLFW.GLFW_KEY_O,
                 SKYCOUNTER_CATEGORY
         ));
+        debugKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.skyblockcounter.toggle_debug",
+                InputConstants.Type.KEYSYM,
+                GLFW.GLFW_KEY_F9,
+                SKYCOUNTER_CATEGORY
+        ));
+        hudEditorKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.skyblockcounter.hud_editor",
+                InputConstants.Type.KEYSYM,
+                GLFW.GLFW_KEY_F7,
+                SKYCOUNTER_CATEGORY
+        ));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            while (toggleHudKey.isDown()) {
+            while (toggleHudKey.consumeClick()) {
                 boolean currentVisible = SkyblockCounterService.isGuiVisible();
                 SkyblockCounterService.setGuiVisible(!currentVisible);
             }
-            while (openConfigKey.isDown()) {
+            while (debugKey.consumeClick()) {
+                SkyblockCounterService.toggleDebugMode();
+            }
+            while (hudEditorKey.consumeClick()) {
+                if (client.screen == null) {
+                    client.setScreen(new de.maexle.skyblockcounter.gui.HudEditorScreen(null));
+                }
+            }
+            while (openConfigKey.consumeClick()) {
                 if (client.screen == null) {
                     client.setScreen(new SkyblockCounterConfigScreen(null));
                 }

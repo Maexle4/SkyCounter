@@ -1,5 +1,7 @@
 {
   "key.category.skyblockcounter.general": "SkyCounter",
   "key.skyblockcounter.open_config": "Open Configuration",
-  "key.skyblockcounter.togglehud": "Toggle HUD"
+  "key.skyblockcounter.togglehud": "Toggle HUD",
+  "key.skyblockcounter.toggle_debug": "Toggle Debug Mode",
+  "key.skyblockcounter.hud_editor": "Open HUD Editor"
 }
