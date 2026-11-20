@@ -2,6 +2,7 @@ package de.maexle.skyblockcounter.gui;
 
 import de.maexle.skyblockcounter.SkyblockCounterConfig;
 import de.maexle.skyblockcounter.SkyblockCounterService;
+import de.maexle.skyblockcounter.RespawnTimer;
 import de.maexle.skyblockcounter.waypoint.WaypointManager;
 import de.maexle.skyblockcounter.command.SkyblockCounterCommand;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -28,10 +29,11 @@ public class SkyblockCounterConfigScreen extends Screen {
     private Category selectedCategory = Category.GENERAL;
     private ToggleSwitch hudToggle;
     private ToggleSwitch percentageToggle;
-    private ToggleSwitch sessionToggle;
+    private ToggleSwitch timerToggle;
+    private ToggleSwitch debugToggle;
+    private ToggleSwitch clearWaypointsToggle;
+    private ToggleSwitch timerSoundToggle;
 
-    private EditBox hudXField;
-    private EditBox hudYField;
     private EditBox apiKeyField;
     private EditBox uuidField;
     private EditBox mobIdField;
@@ -73,7 +75,10 @@ public class SkyblockCounterConfigScreen extends Screen {
 
         hudToggle = new ToggleSwitch(SkyblockCounterService.isGuiVisible());
         percentageToggle = new ToggleSwitch(SkyblockCounterService.isShowCorleonitePercentage());
-        sessionToggle = new ToggleSwitch(SkyblockCounterService.isShowSessionKills());
+        timerToggle = new ToggleSwitch(SkyblockCounterService.isShowRespawnTimer());
+        debugToggle = new ToggleSwitch(SkyblockCounterService.isDebugMode());
+        clearWaypointsToggle = new ToggleSwitch(SkyblockCounterService.isClearWaypointsOnWorldChange());
+        timerSoundToggle = new ToggleSwitch(SkyblockCounterService.isTimerSoundEnabled());
 
         rebuildWidgets();
     }
@@ -88,6 +93,7 @@ public class SkyblockCounterConfigScreen extends Screen {
             case API -> addApiWidgets();
             case TOOLS -> addToolsWidgets();
             case SESSION -> addSessionWidgets();
+            case LANGUAGE -> addLanguageWidgets();
             default -> {
             }
         }
@@ -95,28 +101,52 @@ public class SkyblockCounterConfigScreen extends Screen {
 
     private void addHudWidgets() {
         int y = contentAreaTop + 36 - scrollOffset;
-        hudXField = createTextField(contentX + 17, y + 65, 80, "X");
-        hudXField.setValue(String.valueOf(SkyblockCounterService.getHudX()));
-        hudXField.setResponder(s -> {
-        });
-        addRenderableWidget(hudXField);
+        addRenderableWidget(new StyledButtonWidget(contentX, y + 118, 200, 26,
+                Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("hud.edit")), button -> openHudEditor()));
+        addRenderableWidget(new StyledButtonWidget(contentX, y + 152, 100, 22,
+                Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("session.reset")), button -> resetPositions()));
+    }
 
-        hudYField = createTextField(contentX + 109, y + 65, 80, "Y");
-        hudYField.setValue(String.valueOf(SkyblockCounterService.getHudY()));
-        addRenderableWidget(hudYField);
+    /** Opens the full-screen in-game editor where the HUD is dragged over the live world. */
+    private void openHudEditor() {
+        if (this.minecraft != null) {
+            this.minecraft.gui.setScreen(new HudEditorScreen(this));
+        }
+    }
 
-        addRenderableWidget(new StyledButtonWidget(contentX + 194, y + 56, 70, 22, Component.literal("Apply"), button -> applyHudPosition()));
+    private void addLanguageWidgets() {
+        int y = contentAreaTop + 36 - scrollOffset;
+        int bx = contentX;
+        for (de.maexle.skyblockcounter.i18n.ModLang.Language lang
+                : de.maexle.skyblockcounter.i18n.ModLang.Language.values()) {
+            boolean active = SkyblockCounterService.getModLanguage() == lang;
+            addRenderableWidget(new StyledButtonWidget(bx, y + 4, 120, 24,
+                    Component.literal(lang.displayName() + (active ? "  ✓" : "")),
+                    button -> changeLanguage(lang)));
+            bx += 128;
+        }
+    }
+
+    private void changeLanguage(de.maexle.skyblockcounter.i18n.ModLang.Language language) {
+        SkyblockCounterService.setModLanguage(language);
+        rebuildWidgets();
+        setStatus(language.displayName());
+    }
+
+    private void drawLanguageContent(GuiGraphicsExtractor context, int mouseX, int mouseY, int y) {
+        // The category header above already shows the title and description, so this tab
+        // only needs the language buttons (added in addLanguageWidgets).
     }
 
     private void addMobWidgets() {
         int formY = contentAreaTop + 36 - scrollOffset + getMobListHeight() + 93;
-        mobIdField = createTextField(contentX + 7, formY, contentWidth - 16, "Mob ID");
-        mobNameField = createTextField(contentX + 7, formY + 28, contentWidth - 16, "Display name");
-        mobTextureField = createTextField(contentX + 7, formY + 56, contentWidth - 16, "Texture path (optional)");
+        mobIdField = createTextField(contentX + 7, formY, contentWidth - 16, de.maexle.skyblockcounter.i18n.ModLang.tr("mobs.id"));
+        mobNameField = createTextField(contentX + 7, formY + 28, contentWidth - 16, de.maexle.skyblockcounter.i18n.ModLang.tr("mobs.name"));
+        mobTextureField = createTextField(contentX + 7, formY + 56, contentWidth - 16, de.maexle.skyblockcounter.i18n.ModLang.tr("mobs.texture"));
         addRenderableWidget(mobIdField);
         addRenderableWidget(mobNameField);
         addRenderableWidget(mobTextureField);
-        addRenderableWidget(new StyledButtonWidget(contentX, formY + 84, 80, 22, Component.literal("Add Mob"), button -> addMobFromForm()));
+        addRenderableWidget(new StyledButtonWidget(contentX, formY + 84, 80, 22, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("mobs.add")), button -> addMobFromForm()));
     }
 
     private void addApiWidgets() {
@@ -125,27 +155,59 @@ public class SkyblockCounterConfigScreen extends Screen {
         apiKeyField.setMaxLength(128);
         apiKeyField.setValue(SkyblockCounterService.getConfig().getAPI_KEY() != null ? "*".repeat(SkyblockCounterService.getConfig().getAPI_KEY().length()) : "");
         addRenderableWidget(apiKeyField);
-        addRenderableWidget(new StyledButtonWidget(contentX + contentWidth - 78, y + 45, 70, 22, Component.literal("Save"), button -> saveApiKey()));
+        addRenderableWidget(new StyledButtonWidget(contentX + contentWidth - 78, y + 45, 70, 22, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("api.save")), button -> saveApiKey()));
 
         uuidField = createTextField(contentX + 17, y + 134, contentWidth - 90, "UUID");
         uuidField.setMaxLength(64);
         uuidField.setValue(SkyblockCounterService.getConfig().getundashedUuid());
         addRenderableWidget(uuidField);
-        addRenderableWidget(new StyledButtonWidget(contentX + contentWidth - 78, y + 126, 70, 22, Component.literal("Save"), button -> saveUuid()));
+        addRenderableWidget(new StyledButtonWidget(contentX + contentWidth - 78, y + 126, 70, 22, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("api.save")), button -> saveUuid()));
     }
 
     private void addToolsWidgets() {
         int y = contentAreaTop + 36 - scrollOffset + 36;
-        addRenderableWidget(new StyledButtonWidget(contentX, y, 220, 24, Component.literal("Scan for Corleone Structures"), button -> runCorleoneFinder()));
+        addRenderableWidget(new StyledButtonWidget(contentX, y, 220, 24, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("tools.scan")), button -> runCorleoneFinder()));
+    }
+
+    /** Layout constants shared by the session widgets and their rendering code. */
+    private static final int SESSION_MODE_CARD_STEP = 38;
+    private static final int SESSION_STAT_STEP = 34;
+
+    private int sessionContentTop() {
+        return contentAreaTop + 36 - scrollOffset;
+    }
+
+    /** Y where the stats block starts, right after the four mode cards. */
+    private int sessionStatsTop() {
+        return sessionContentTop() + 16
+                + SESSION_MODE_CARD_STEP * de.maexle.skyblockcounter.CountingMode.values().length
+                + 8;
     }
 
     private void addSessionWidgets() {
-        int y = contentAreaTop + 36 - scrollOffset + 218;
-        addRenderableWidget(new StyledButtonWidget(contentX, y, 36, 22, Component.literal("-5"), button -> adjustSession(-5)));
-        addRenderableWidget(new StyledButtonWidget(contentX + 42, y, 36, 22, Component.literal("-1"), button -> adjustSession(-1)));
-        addRenderableWidget(new StyledButtonWidget(contentX + 84, y, 36, 22, Component.literal("+1"), button -> adjustSession(1)));
-        addRenderableWidget(new StyledButtonWidget(contentX + 126, y, 36, 22, Component.literal("+5"), button -> adjustSession(5)));
-        addRenderableWidget(new StyledButtonWidget(contentX + contentWidth - 90, y, 90, 32, Component.literal("Reset"), button -> resetSession()));
+        // Placed below the stats block so the buttons never cover the numbers.
+        int statsY = sessionStatsTop();
+        int controlsY = statsY + SESSION_STAT_STEP * 4 + 10;
+        boolean local = SkyblockCounterService.isLocalCounting();
+
+        addRenderableWidget(new StyledButtonWidget(contentX + 96, controlsY, 32, 20,
+                Component.literal("-5"), b -> adjustSession(-5), local));
+        addRenderableWidget(new StyledButtonWidget(contentX + 132, controlsY, 32, 20,
+                Component.literal("-1"), b -> adjustSession(-1), local));
+        addRenderableWidget(new StyledButtonWidget(contentX + 168, controlsY, 32, 20,
+                Component.literal("+1"), b -> adjustSession(1), local));
+        addRenderableWidget(new StyledButtonWidget(contentX + 204, controlsY, 32, 20,
+                Component.literal("+5"), b -> adjustSession(5), local));
+
+        int dropY = controlsY + 26;
+        addRenderableWidget(new StyledButtonWidget(contentX + 132, dropY, 32, 20,
+                Component.literal("-1"), b -> adjustCorleonite(-1), local));
+        addRenderableWidget(new StyledButtonWidget(contentX + 168, dropY, 32, 20,
+                Component.literal("+1"), b -> adjustCorleonite(1), local));
+
+        addRenderableWidget(new StyledButtonWidget(contentX + contentWidth - 90, controlsY, 90, 22,
+                Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("session.reset")),
+                b -> resetSession(), local));
     }
 
     private EditBox createTextField(int x, int y, int width, String placeholder) {
@@ -170,7 +232,7 @@ public class SkyblockCounterConfigScreen extends Screen {
         guiGraphics.disableScissor();
 
         renderStatus(guiGraphics);
-        guiGraphics.textWithBackdrop(this.font, Component.literal("ESC to close"), panelX + panelWidth - 94, panelY + panelHeight - 16, 999, ConfigPanelHelper.TEXT_SECONDARY);
+        guiGraphics.textWithBackdrop(this.font, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("footer.esc")), panelX + panelWidth - 94, panelY + panelHeight - 16, 999, ConfigPanelHelper.TEXT_SECONDARY);
     }
 
     private void drawPanel(GuiGraphicsExtractor context) {
@@ -186,11 +248,11 @@ public class SkyblockCounterConfigScreen extends Screen {
         context.textWithBackdrop(this.font, Component.literal("Sky"), panelX + 17, panelY + 16, 50, ConfigPanelHelper.TEXT_PRIMARY);
         int skyWidth = this.font.width("Sky");
         context.textWithBackdrop(this.font, Component.literal("Counter"), panelX + 17 + skyWidth, panelY + 16, 80, ConfigPanelHelper.ACCENT);
-        context.textWithBackdrop(this.font, Component.literal("CONFIGURATION"), panelX + panelWidth - 99, panelY + 17, 120, ConfigPanelHelper.TEXT_SECONDARY);
+        context.textWithBackdrop(this.font, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("header.config")), panelX + panelWidth - 99, panelY + 17, 120, ConfigPanelHelper.TEXT_SECONDARY);
     }
 
     private void drawCategories(GuiGraphicsExtractor context, int mouseX, int mouseY) {
-        context.textWithBackdrop(this.font, Component.literal("CATEGORIES"), panelX + 14, panelY + 57, sidebarWidth, ConfigPanelHelper.TEXT_SECONDARY);
+        context.textWithBackdrop(this.font, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("header.categories")), panelX + 14, panelY + 57, sidebarWidth, ConfigPanelHelper.TEXT_SECONDARY);
         int y = panelY + 75;
         for (Category category : Category.values()) {
             boolean selected = selectedCategory == category;
@@ -201,15 +263,15 @@ public class SkyblockCounterConfigScreen extends Screen {
                     context.fill(panelX + 7, y + 4, panelX + 9, y + 19, ConfigPanelHelper.ACCENT);
                 }
             }
-            context.textWithBackdrop(this.font, Component.literal(category.label), panelX + 16, y + 8, sidebarWidth - 20, selected ? ConfigPanelHelper.TEXT_PRIMARY : ConfigPanelHelper.TEXT_SECONDARY);
+            context.textWithBackdrop(this.font, Component.literal(category.label()), panelX + 16, y + 8, sidebarWidth - 20, selected ? ConfigPanelHelper.TEXT_PRIMARY : ConfigPanelHelper.TEXT_SECONDARY);
             y += 27;
         }
     }
 
     private void drawContent(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         int rowY = panelY + CONTENT_TOP - scrollOffset;
-        context.textWithBackdrop(this.font, Component.literal(selectedCategory.title), contentX, rowY, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
-        context.textWithBackdrop(this.font, Component.literal(selectedCategory.description), contentX, rowY + 15, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
+        context.textWithBackdrop(this.font, Component.literal(selectedCategory.title()), contentX, rowY, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
+        context.textWithBackdrop(this.font, Component.literal(selectedCategory.description()), contentX, rowY + 15, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
 
         switch (selectedCategory) {
             case GENERAL -> drawGeneralContent(context, mouseX, mouseY, delta, rowY + 36);
@@ -218,6 +280,7 @@ public class SkyblockCounterConfigScreen extends Screen {
             case SESSION -> drawSessionContent(context, mouseX, mouseY, delta, rowY + 36);
             case API -> drawApiContent(context, mouseX, mouseY, rowY + 36);
             case TOOLS -> drawToolsContent(context, mouseX, mouseY, rowY + 36);
+            case LANGUAGE -> drawLanguageContent(context, mouseX, mouseY, rowY + 36);
         }
 
         updateMaxScroll();
@@ -225,34 +288,59 @@ public class SkyblockCounterConfigScreen extends Screen {
 
     private void drawGeneralContent(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta, int y) {
         drawToggleOption(context, mouseX, mouseY, delta, contentX, y, contentWidth,
-                "Show HUD", "Shows or hides the SkyCounter in-game.",
+                de.maexle.skyblockcounter.i18n.ModLang.tr("opt.showHud"), de.maexle.skyblockcounter.i18n.ModLang.tr("opt.showHud.desc"),
                 SkyblockCounterService.isGuiVisible(), hudToggle);
         drawToggleOption(context, mouseX, mouseY, delta, contentX, y + OPTION_HEIGHT + OPTION_GAP, contentWidth,
-                "Corleonite Percentage", "Displays the Corleonite drop rate in the HUD.",
+                de.maexle.skyblockcounter.i18n.ModLang.tr("opt.percentage"), de.maexle.skyblockcounter.i18n.ModLang.tr("opt.percentage.desc"),
                 SkyblockCounterService.isShowCorleonitePercentage(), percentageToggle);
+        drawToggleOption(context, mouseX, mouseY, delta, contentX, y + (OPTION_HEIGHT + OPTION_GAP) * 2, contentWidth,
+                de.maexle.skyblockcounter.i18n.ModLang.tr("opt.timer"), de.maexle.skyblockcounter.i18n.ModLang.tr("opt.timer.desc"),
+                SkyblockCounterService.isShowRespawnTimer(), timerToggle);
+        drawToggleOption(context, mouseX, mouseY, delta, contentX, y + (OPTION_HEIGHT + OPTION_GAP) * 3, contentWidth,
+                de.maexle.skyblockcounter.i18n.ModLang.tr("opt.debug"), de.maexle.skyblockcounter.i18n.ModLang.tr("opt.debug.desc"),
+                SkyblockCounterService.isDebugMode(), debugToggle);
+        drawToggleOption(context, mouseX, mouseY, delta, contentX, y + (OPTION_HEIGHT + OPTION_GAP) * 4, contentWidth,
+                de.maexle.skyblockcounter.i18n.ModLang.tr("opt.clearWaypoints"),
+                de.maexle.skyblockcounter.i18n.ModLang.tr("opt.clearWaypoints.desc"),
+                SkyblockCounterService.isClearWaypointsOnWorldChange(), clearWaypointsToggle);
+        drawToggleOption(context, mouseX, mouseY, delta, contentX, y + (OPTION_HEIGHT + OPTION_GAP) * 5, contentWidth,
+                de.maexle.skyblockcounter.i18n.ModLang.tr("opt.timerSound"),
+                de.maexle.skyblockcounter.i18n.ModLang.tr("opt.timerSound.desc"),
+                SkyblockCounterService.isTimerSoundEnabled(), timerSoundToggle);
     }
 
     private void drawHudContent(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta, int y) {
-        ConfigPanelHelper.drawOptionCard(context, contentX, y, contentWidth, 88, ConfigPanelHelper.isInside(mouseX, mouseY, contentX, y, contentWidth, 88));
-        context.textWithBackdrop(this.font, Component.literal("HUD Position"), contentX + 14, y + 13, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
-        context.textWithBackdrop(this.font, Component.literal("Current: X=" + SkyblockCounterService.getHudX() + ", Y=" + SkyblockCounterService.getHudY()),
+        ConfigPanelHelper.drawOptionCard(context, contentX, y, contentWidth, 106,
+                ConfigPanelHelper.isInside(mouseX, mouseY, contentX, y, contentWidth, 106));
+        context.textWithBackdrop(this.font, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("cat.hud.title")),
+                contentX + 14, y + 12, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
+        context.textWithBackdrop(this.font,
+                Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("hud.explain1")),
                 contentX + 14, y + 30, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
-        context.textWithBackdrop(this.font, Component.literal("Enter coordinates and click Apply."), contentX + 14, y + 44, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
+        context.textWithBackdrop(this.font,
+                Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("hud.explain2")),
+                contentX + 14, y + 42, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
+        context.textWithBackdrop(this.font,
+                Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("hud.explain3")),
+                contentX + 14, y + 56, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
 
-        drawFieldBackground(context, contentX + 12, y + 58, 80, 20);
-        drawFieldBackground(context, contentX + 104, y + 58, 80, 20);
+        int currentY = y + 76;
+        context.textWithBackdrop(this.font,
+                Component.literal("Kills: X=" + SkyblockCounterService.getHudX() + ", Y=" + SkyblockCounterService.getHudY()
+                        + "    Timer: X=" + SkyblockCounterService.getTimerX() + ", Y=" + SkyblockCounterService.getTimerY()),
+                contentX + 14, currentY, contentWidth, ConfigPanelHelper.ACCENT_DARK);
     }
 
     private void drawMobsContent(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta, int y) {
         int presetY = y;
-        context.textWithBackdrop(this.font, Component.literal("Quick Presets"), contentX, presetY, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
+        context.textWithBackdrop(this.font, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("mobs.presets")), contentX, presetY, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
         int buttonWidth = (contentWidth - 16) / 3;
         drawPresetButton(context, mouseX, mouseY, contentX, presetY + 18, buttonWidth, 28, "Treasure Hoarder", "treasure_hoarder_70");
         drawPresetButton(context, mouseX, mouseY, contentX + buttonWidth + 8, presetY + 18, buttonWidth, 28, "Corleone", "team_treasurite_corleone_200");
         drawPresetButton(context, mouseX, mouseY, contentX + (buttonWidth + 8) * 2, presetY + 18, buttonWidth, 28, "Zealot", "zealot_enderman_55");
 
         int listY = presetY + 58;
-        context.textWithBackdrop(this.font, Component.literal("Mob List"), contentX, listY, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
+        context.textWithBackdrop(this.font, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("mobs.list")), contentX, listY, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
         List<SkyblockCounterConfig.MobEntry> mobs = SkyblockCounterActions.listMobs();
         int rowY = listY + 16;
         String currentMobId = SkyblockCounterService.getConfig().getLastMobId();
@@ -267,57 +355,85 @@ public class SkyblockCounterConfigScreen extends Screen {
             context.textWithBackdrop(this.font, Component.literal(entry.id), contentX + 10 + this.font.width(entry.name) + 8, rowY + 8, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
             ConfigPanelHelper.drawButton(context, contentX + contentWidth - 52, rowY + 4, 44, 16,
                     ConfigPanelHelper.isInside(mouseX, mouseY, contentX + contentWidth - 52, rowY + 4, 44, 16), false);
-            context.textWithBackdrop(this.font, Component.literal("Remove"), contentX + contentWidth - 48 , rowY + 8, 44, 0xFFFF8888);
+            context.textWithBackdrop(this.font, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("mobs.remove")), contentX + contentWidth - 48 , rowY + 8, 44, 0xFFFF8888);
             rowY += 28;
         }
 
         int formY = rowY + 12;
-        context.textWithBackdrop(this.font, Component.literal("Add Mob"), contentX, formY, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
+        context.textWithBackdrop(this.font, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("mobs.add")), contentX, formY, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
         drawFieldBackground(context, contentX, formY + 16, contentWidth - 16, 20);
         drawFieldBackground(context, contentX, formY + 44, contentWidth - 16, 20);
         drawFieldBackground(context, contentX, formY + 72, contentWidth - 16, 20);
     }
 
     private void drawSessionContent(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta, int y) {
-        drawToggleOption(context, mouseX, mouseY, delta, contentX, y, contentWidth,
-                "Session Mode", "Enables separate kill tracking for this session.",
-                SkyblockCounterService.isShowSessionKills(), sessionToggle);
+        de.maexle.skyblockcounter.CountingMode current = SkyblockCounterService.getCountingMode();
 
-        int statsY = y + OPTION_HEIGHT + OPTION_GAP + 8;
-        if (SkyblockCounterService.isShowSessionKills()) {
-            drawStatRow(context, statsY, "Kills", String.valueOf(SkyblockCounterService.getSessionKills()));
-            drawStatRow(context, statsY + 34, "Time Farmed", SkyblockCounterActions.formatTimeFarmed().orElse("--:--:--"));
-            drawStatRow(context, statsY + 68, "Corleonite / Hour", SkyblockCounterActions.formatCorleonitePerHour().orElse("0.00"));
-            drawStatRow(context, statsY + 102, "Corleonite Stats", SkyblockCounterActions.getCorleoniteStats().orElse("No data"));
+        context.textWithBackdrop(this.font, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("session.modeLabel")),
+                contentX, y, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
+
+        // Four selectable mode cards, one per row.
+        int cardY = y + 16;
+        for (de.maexle.skyblockcounter.CountingMode mode : de.maexle.skyblockcounter.CountingMode.values()) {
+            boolean selected = mode == current;
+            boolean hovered = ConfigPanelHelper.isInside(mouseX, mouseY, contentX, cardY, contentWidth, 34);
+            ConfigPanelHelper.drawOptionCard(context, contentX, cardY, contentWidth, 34, hovered || selected);
+            if (selected) {
+                context.fill(contentX, cardY + 4, contentX + 3, cardY + 30, ConfigPanelHelper.ACCENT);
+            }
+            context.textWithBackdrop(this.font, Component.literal(mode.displayName()),
+                    contentX + 12, cardY + 6, contentWidth - 24,
+                    selected ? ConfigPanelHelper.TEXT_PRIMARY : ConfigPanelHelper.TEXT_SECONDARY);
+            context.textWithBackdrop(this.font, Component.literal(mode.description()),
+                    contentX + 12, cardY + 19, contentWidth - 24, ConfigPanelHelper.TEXT_SECONDARY);
+            cardY += 38;
+        }
+
+        int statsY = cardY + 8;
+        if (current.isLocal()) {
+            drawStatRow(context, statsY, de.maexle.skyblockcounter.i18n.ModLang.tr("session.kills"), String.valueOf(SkyblockCounterService.getSessionKills()));
+            drawStatRow(context, statsY + 34, de.maexle.skyblockcounter.i18n.ModLang.tr("session.timeFarmed"), SkyblockCounterActions.formatTimeFarmed().orElse("--:--:--"));
+            drawStatRow(context, statsY + 68, de.maexle.skyblockcounter.i18n.ModLang.tr("session.cph"), SkyblockCounterActions.formatCorleonitePerHour().orElse("0.00"));
+            drawStatRow(context, statsY + 102, de.maexle.skyblockcounter.i18n.ModLang.tr("session.stats"), SkyblockCounterActions.getCorleoniteStats().orElse(de.maexle.skyblockcounter.i18n.ModLang.tr("session.noData")));
         } else {
             ConfigPanelHelper.drawStatCard(context, contentX, statsY, contentWidth, 48);
-            context.textWithBackdrop(this.font, Component.literal("Enable session mode to view stats"), contentX + 7, statsY + 20, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
+            context.textWithBackdrop(this.font, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("session.enableHint")),
+                    contentX + 7, statsY + 20, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
         }
+
+        // Row labels for the adjustment buttons added in addSessionWidgets().
+        int controlsY = statsY + SESSION_STAT_STEP * 4 + 10;
+        context.textWithBackdrop(this.font, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("session.kills")),
+                contentX + 4, controlsY + 6, 88, ConfigPanelHelper.TEXT_SECONDARY);
+        context.textWithBackdrop(this.font, Component.literal("Corleonite"),
+                contentX + 4, controlsY + 32, 120, ConfigPanelHelper.TEXT_SECONDARY);
+        context.textWithBackdrop(this.font, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("session.adjustHint")),
+                contentX + 4, controlsY + 58, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
     }
 
     private void drawApiContent(GuiGraphicsExtractor context, int mouseX, int mouseY, int y) {
         ConfigPanelHelper.drawOptionCard(context, contentX, y, contentWidth, 72, false);
-        context.textWithBackdrop(this.font, Component.literal("Hypixel API Key"), contentX + 14, y + 13, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
-        context.textWithBackdrop(this.font, Component.literal("Required for bestiary kill counts from the API."), contentX + 14, y + 30, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
+        context.textWithBackdrop(this.font, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("api.key")), contentX + 14, y + 13, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
+        context.textWithBackdrop(this.font, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("api.key.desc")), contentX + 14, y + 30, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
         drawFieldBackground(context, contentX + 12, y + 46, contentWidth - 100, 20);
 
         ConfigPanelHelper.drawOptionCard(context, contentX, y + 82, contentWidth, 72, false);
-        context.textWithBackdrop(this.font, Component.literal("Player UUID"), contentX + 14, y + 95, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
-        context.textWithBackdrop(this.font, Component.literal("Your Minecraft UUID."), contentX + 14, y + 112, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
+        context.textWithBackdrop(this.font, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("api.uuid")), contentX + 14, y + 95, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
+        context.textWithBackdrop(this.font, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("api.uuid.desc")), contentX + 14, y + 112, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
         drawFieldBackground(context, contentX + 12, y + 128, contentWidth - 100, 20);
     }
 
     private void drawToolsContent(GuiGraphicsExtractor context, int mouseX, int mouseY, int y) {
-        context.textWithBackdrop(this.font, Component.literal("Corleone Finder"), contentX, y + 4, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
-        context.textWithBackdrop(this.font, Component.literal("Scans loaded chunks for Corleone boss structures and saves waypoints."), contentX, y + 18, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
+        context.textWithBackdrop(this.font, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("tools.finder")), contentX, y + 4, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
+        context.textWithBackdrop(this.font, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("tools.finder.desc")), contentX, y + 18, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
 
         int resultY = y + 68;
         List<WaypointManager.Waypoint> waypoints = WaypointManager.getWaypoints();
 
         if (waypoints.isEmpty()) {
-            context.textWithBackdrop(this.font, Component.literal("No saved waypoints yet."), contentX, resultY, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
+            context.textWithBackdrop(this.font, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("tools.noWaypoints")), contentX, resultY, contentWidth, ConfigPanelHelper.TEXT_SECONDARY);
         } else {
-            context.textWithBackdrop(this.font, Component.literal("Saved Waypoints:"), contentX, resultY, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
+            context.textWithBackdrop(this.font, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("tools.savedWaypoints")), contentX, resultY, contentWidth, ConfigPanelHelper.TEXT_PRIMARY);
             int rowY = resultY + 16;
             for (WaypointManager.Waypoint wp : waypoints) {
                 boolean hovered = ConfigPanelHelper.isInside(mouseX, mouseY, contentX, rowY, contentWidth, 24);
@@ -329,7 +445,7 @@ public class SkyblockCounterConfigScreen extends Screen {
 
                 ConfigPanelHelper.drawButton(context, contentX + contentWidth - 52, rowY + 4, 44, 16,
                         ConfigPanelHelper.isInside(mouseX, mouseY, contentX + contentWidth - 52, rowY + 4, 44, 16), false);
-                context.textWithBackdrop(this.font, Component.literal("Remove"), contentX + contentWidth - 48, rowY + 8, 44, 0xFFFF8888);
+                context.textWithBackdrop(this.font, Component.literal(de.maexle.skyblockcounter.i18n.ModLang.tr("mobs.remove")), contentX + contentWidth - 48, rowY + 8, 44, 0xFFFF8888);
 
                 rowY += 28;
             }
@@ -382,12 +498,13 @@ public class SkyblockCounterConfigScreen extends Screen {
 
     private void updateMaxScroll() {
         int contentHeight = switch (selectedCategory) {
-            case GENERAL -> 150;
-            case HUD -> 130;
+            case GENERAL -> 500;
+            case HUD -> 260;
             case MOBS -> 58 + getMobListHeight() + 220;
-            case SESSION -> SkyblockCounterService.isShowSessionKills() ? 250 : 170;
+            case SESSION -> SkyblockCounterService.isLocalCounting() ? 560 : 480;
             case API -> 160;
             case TOOLS -> 120 + (WaypointManager.getWaypoints().size() * 28);
+            case LANGUAGE -> 160;
         };
         int visibleHeight = contentAreaBottom - contentAreaTop;
         maxScroll = Math.max(0, contentHeight - visibleHeight + 20);
@@ -396,7 +513,8 @@ public class SkyblockCounterConfigScreen extends Screen {
 
     @Override
     public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent click, boolean doubleClick) {
-        if (click.button() != 0) {
+        // Minecraft 26.3 uses SDL input ids, where the primary (left) button is 1.
+        if (click.button() != 1) {
             return super.mouseClicked(click, doubleClick);
         }
 
@@ -430,6 +548,12 @@ public class SkyblockCounterConfigScreen extends Screen {
         return super.mouseClicked(click, doubleClick);
     }
 
+    private void resetPositions() {
+        SkyblockCounterService.setHudPosition(10, 10);
+        SkyblockCounterService.setTimerPosition(10, 40);
+        setStatus("HUD positions reset");
+    }
+
     private boolean handleCategoryClick(double mouseX, double mouseY) {
         int categoryY = panelY + 75;
         for (Category category : Category.values()) {
@@ -457,14 +581,53 @@ public class SkyblockCounterConfigScreen extends Screen {
             setStatus("Corleonite percentage " + (SkyblockCounterService.isShowCorleonitePercentage() ? "enabled" : "disabled"));
             return true;
         }
+        if (isToggleClicked(mouseX, mouseY, contentX, firstOptionY + (OPTION_HEIGHT + OPTION_GAP) * 2, contentWidth)) {
+            SkyblockCounterService.setShowRespawnTimer(!SkyblockCounterService.isShowRespawnTimer());
+            setStatus("Respawn timer " + (SkyblockCounterService.isShowRespawnTimer() ? "enabled" : "disabled"));
+            return true;
+        }
+        if (isToggleClicked(mouseX, mouseY, contentX, firstOptionY + (OPTION_HEIGHT + OPTION_GAP) * 3, contentWidth)) {
+            SkyblockCounterService.toggleDebugMode();
+            setStatus("Debug mode " + (SkyblockCounterService.isDebugMode() ? "enabled" : "disabled"));
+            return true;
+        }
+        if (isToggleClicked(mouseX, mouseY, contentX, firstOptionY + (OPTION_HEIGHT + OPTION_GAP) * 4, contentWidth)) {
+            SkyblockCounterService.setClearWaypointsOnWorldChange(
+                    !SkyblockCounterService.isClearWaypointsOnWorldChange());
+            setStatus("Clear waypoints on world change "
+                    + (SkyblockCounterService.isClearWaypointsOnWorldChange() ? "enabled" : "disabled"));
+            return true;
+        }
+        if (isToggleClicked(mouseX, mouseY, contentX, firstOptionY + (OPTION_HEIGHT + OPTION_GAP) * 5, contentWidth)) {
+            SkyblockCounterService.setTimerSoundEnabled(!SkyblockCounterService.isTimerSoundEnabled());
+            setStatus("Respawn timer sound "
+                    + (SkyblockCounterService.isTimerSoundEnabled() ? "enabled" : "disabled"));
+            return true;
+        }
         return false;
     }
 
+    /** Maps a click on the mode cards to the corresponding mode. */
+    private void selectCountingModeAt(double mouseY) {
+        int rowY = panelY + CONTENT_TOP - scrollOffset;
+        int cardY = rowY + 36 + 16;
+
+        for (de.maexle.skyblockcounter.CountingMode mode : de.maexle.skyblockcounter.CountingMode.values()) {
+            if (mouseY >= cardY && mouseY < cardY + 34) {
+                SkyblockCounterActions.setCountingMode(mode);
+                setStatus(mode.displayName());
+                rebuildWidgets();
+                return;
+            }
+            cardY += 38;
+        }
+    }
+
     private boolean handleSessionToggleClick(double mouseX, double mouseY, int firstOptionY) {
-        if (isToggleClicked(mouseX, mouseY, contentX, firstOptionY, contentWidth)) {
-            boolean enabled = SkyblockCounterActions.toggleSession();
-            setStatus("Session mode " + (enabled ? "enabled" : "disabled"));
-            rebuildWidgets();
+        // Clicking anywhere in the mode-card column selects that mode.
+        if (ConfigPanelHelper.isInside(mouseX, mouseY, contentX, firstOptionY + 16,
+                contentWidth, 38 * de.maexle.skyblockcounter.CountingMode.values().length)) {
+            selectCountingModeAt(mouseY);
             return true;
         }
         return false;
@@ -543,19 +706,6 @@ public class SkyblockCounterConfigScreen extends Screen {
         return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
     }
 
-    private void applyHudPosition() {
-        try {
-            int x = Integer.parseInt(hudXField.getValue().trim());
-            int y = Integer.parseInt(hudYField.getValue().trim());
-            LOGGER.info(x + " " + y);
-            SkyblockCounterActions.setHudPosition(x, y);
-            setStatus("HUD position set to X: " + x + ", Y: " + y);
-            sendChat("HUD position set to X: " + x + ", Y: " + y);
-        } catch (NumberFormatException e) {
-            setStatus("Invalid HUD coordinates");
-        }
-    }
-
     private void addMobFromForm() {
         String id = mobIdField.getValue().trim();
         String name = mobNameField.getValue().trim();
@@ -608,6 +758,12 @@ public class SkyblockCounterConfigScreen extends Screen {
         rebuildWidgets();
     }
 
+    /** Manual Corleonite adjustment, for when a [Sacks] message was missed. */
+    private void adjustCorleonite(int amount) {
+        SkyblockCounterService.adjustSackCorleonite(amount);
+        setStatus("Corleonite: " + SkyblockCounterService.getSackCorleoniteTotal());
+    }
+
     private void adjustSession(int amount) {
         if (amount > 0) {
             SkyblockCounterActions.addSessionKills(amount);
@@ -634,7 +790,7 @@ public class SkyblockCounterConfigScreen extends Screen {
     @Override
     public void onClose() {
         if (this.minecraft != null) {
-            this.minecraft.setScreen(parent);
+            this.minecraft.gui.setScreen(parent);
         }
     }
 
@@ -644,21 +800,30 @@ public class SkyblockCounterConfigScreen extends Screen {
     }
 
     private enum Category {
-        GENERAL("General", "General Settings", "Control the main display options."),
-        HUD("HUD", "HUD Position", "Set where the counter appears on screen."),
-        MOBS("Mobs", "Mob Tracking", "Switch targets and manage custom mobs."),
-        API("API", "API Settings", "Configure Hypixel API access."),
-        SESSION("Session", "Session Tracking", "Track kills and view statistics for your current session."),
-        TOOLS("Tools", "Tools", "Utility features for Skyblock farming.");
+        GENERAL("general"),
+        HUD("hud"),
+        MOBS("mobs"),
+        API("api"),
+        SESSION("session"),
+        TOOLS("tools"),
+        LANGUAGE("language");
 
-        private final String label;
-        private final String title;
-        private final String description;
+        private final String key;
 
-        Category(String label, String title, String description) {
-            this.label = label;
-            this.title = title;
-            this.description = description;
+        Category(String key) {
+            this.key = key;
+        }
+
+        String label() {
+            return de.maexle.skyblockcounter.i18n.ModLang.tr("cat." + key + ".label");
+        }
+
+        String title() {
+            return de.maexle.skyblockcounter.i18n.ModLang.tr("cat." + key + ".title");
+        }
+
+        String description() {
+            return de.maexle.skyblockcounter.i18n.ModLang.tr("cat." + key + ".desc");
         }
     }
 }

@@ -10,37 +10,58 @@ import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 import net.minecraft.client.KeyMapping;
 import com.mojang.blaze3d.platform.InputConstants;
-import org.lwjgl.glfw.GLFW;
 
 public class SkyblockCounterClient implements ClientModInitializer {
 
     private static final KeyMapping.Category SKYCOUNTER_CATEGORY = KeyMapping.Category.register(SkyblockCounter.id("general"));
     private static KeyMapping toggleHudKey;
+    private static KeyMapping debugKey;
+    private static KeyMapping hudEditorKey;
     public static KeyMapping openConfigKey;
 
     @Override
     public void onInitializeClient() {
         toggleHudKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.skyblockcounter.togglehud",
-                InputConstants.Type.KEYSYM,
-                GLFW.GLFW_KEY_H,
+                InputConstants.Type.KEYBOARD,
+                InputConstants.KEY_H,
                 SKYCOUNTER_CATEGORY
         ));
         openConfigKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.skyblockcounter.open_config",
-                InputConstants.Type.KEYSYM,
-                GLFW.GLFW_KEY_O,
+                InputConstants.Type.KEYBOARD,
+                InputConstants.KEY_O,
+                SKYCOUNTER_CATEGORY
+        ));
+        debugKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.skyblockcounter.toggle_debug",
+                InputConstants.Type.KEYBOARD,
+                InputConstants.KEY_F9,
+                SKYCOUNTER_CATEGORY
+        ));
+        hudEditorKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.skyblockcounter.hud_editor",
+                InputConstants.Type.KEYBOARD,
+                InputConstants.KEY_F7,
                 SKYCOUNTER_CATEGORY
         ));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            while (toggleHudKey.isDown()) {
+            while (toggleHudKey.consumeClick()) {
                 boolean currentVisible = SkyblockCounterService.isGuiVisible();
                 SkyblockCounterService.setGuiVisible(!currentVisible);
             }
-            while (openConfigKey.isDown()) {
-                if (client.screen == null) {
-                    client.setScreen(new SkyblockCounterConfigScreen(null));
+            while (debugKey.consumeClick()) {
+                SkyblockCounterService.toggleDebugMode();
+            }
+            while (hudEditorKey.consumeClick()) {
+                if (client.gui.screen() == null) {
+                    client.gui.setScreen(new de.maexle.skyblockcounter.gui.HudEditorScreen(null));
+                }
+            }
+            while (openConfigKey.consumeClick()) {
+                if (client.gui.screen() == null) {
+                    client.gui.setScreen(new SkyblockCounterConfigScreen(null));
                 }
             }
         });

@@ -13,7 +13,7 @@ public final class PrimitiveCollector {
 
     public void renderWaypoint(BlockPos position, String label, int configuredColor) {
         int color = opaqueArgb(configuredColor);
-        Vec3 center = position.getCenter();
+        Vec3 center = Vec3.atCenterOf(position);
 
         Gizmos.cuboid(position, 0.01F, GizmoStyle.stroke(color, OUTLINE_WIDTH)).setAlwaysOnTop();
         Gizmos.point(center, color, MARKER_SIZE).setAlwaysOnTop();
